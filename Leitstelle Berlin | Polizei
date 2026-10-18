@@ -510,7 +510,7 @@ async def dienstnummer_info(interaction: discord.Interaction, user: discord.Memb
             gefundene_nummer = nummer
             break
 
-if gefundene_nummer:
+    if gefundene_nummer:
         await interaction.response.send_message(f"👮‍♂️ {user.mention} hat die Dienstnummer **{gefundene_nummer}**.", ephemeral=True)
     else:
         await interaction.response.send_message(f"❌ {user.mention} hat noch keine Dienstnummer zugewiesen bekommen.", ephemeral=True)
