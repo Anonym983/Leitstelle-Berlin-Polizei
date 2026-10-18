@@ -513,7 +513,7 @@ async def dienstnummer_info(interaction: discord.Interaction, user: discord.Memb
     if gefundene_nummer:
         await interaction.response.send_message(f"👮‍♂️ {user.mention} hat die Dienstnummer **{gefundene_nummer}**.", ephemeral=True)
     else:
-await interaction.response.send_message(f"❌ {user.mention} hat noch keine Dienstnummer zugewiesen bekommen.", ephemeral=True)
+        await interaction.response.send_message(f"❌ {user.mention} hat noch keine Dienstnummer zugewiesen bekommen.", ephemeral=True)
 @bot.tree.command(name="befehle", description="Zeigt alle verfügbaren Befehle an")
 async def befehle(interaction: discord.Interaction):
     embed = discord.Embed(
