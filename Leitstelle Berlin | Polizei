@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import time
 import datetime
@@ -16,6 +16,7 @@ BRANDING_FOOTER = "Leitstelle Berlin | Polizei"
 
 # --- Rollen IDs ---
 ROLLE_ANWALT = 1561406761796247592 
+ROLLE_HAUPT_POLIZEI = 1561447435522539702 # Die "Beamter" Rolle
 
 # --- Kanal IDs ---
 KANAL_ANWALT = 1561113869156352020
@@ -31,10 +32,13 @@ KANAL_SUSPENDIERUNG = 1561116388007878746
 KANAL_ENTLASSUNG = 1561116526621364445     
 KANAL_SPERREN = 1561116717906657380        
 
-# Kanal, wo die Dienstnummern-Zuweisungen gepostet werden
+# Kanal für Dienstnummern-Update
 KANAL_DIENSTNUMMER = 1561115548610199633 
 
-# Rollen, die Dienstnummern vergeben dürfen (Die komplette Führungsebene)
+# Kanal, wo das automatische "Freie Nummern"-Panel stehen soll
+KANAL_DIENSTNUMMER_PANEL = 1561407060036427776 
+
+# Die Führungsebene (Darf Nummern vergeben)
 ROLLEN_DIENSTNUMMER_MANAGER = [
     1561139230988705914, # Inspekteur
     1561139458068320349, # [PP] Polizeipräsident
@@ -93,11 +97,74 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
+# --- DATENBANK LOGIK ---
+DB_FILE = "dienstnummern.json"
+PANEL_DB_FILE = "panel_messages.json"
+
+def load_db():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_db(data):
+    with open(DB_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+def load_panel_db():
+    if os.path.exists(PANEL_DB_FILE):
+        with open(PANEL_DB_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_panel_db(data):
+    with open(PANEL_DB_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+def get_next_free_number(db):
+    for i in range(1, 501):
+        nummer = f"BLP{i:02d}"
+        if nummer not in db.values():
+            return nummer
+    return None
+
+def generate_panel_embed(db):
+    freie_nummern = []
+    for i in range(1, 501):
+        nummer = f"BLP{i:02d}"
+        if nummer not in db.values():
+            freie_nummern.append(nummer)
+
+    embed = discord.Embed(
+        title="🪪 Dienstnummern-Übersicht (Live)",
+        description="Hier siehst du alle aktuell **freien** Dienstnummern.",
+        color=0x9B59B6
+    )
+
+    if freie_nummern:
+        text_block = ""
+        for nummer in freie_nummern:
+            text_block += f"{nummer}, "
+            if len(text_block) > 900:
+                embed.add_field(name="Freie Nummern", value=text_block, inline=False)
+                text_block = ""
+        if text_block:
+            embed.add_field(name="Freie Nummern", value=text_block, inline=False)
+    else:
+        embed.description = "❌ Es sind aktuell keine Nummern mehr frei (alle 500 vergeben)!"
+
+    embed.set_footer(text=f"{BRANDING_FOOTER} | Aktualisiert um {datetime.datetime.now().strftime('%H:%M')}")
+    return embed
+
+# --- BOT SETUP ---
+
 class PolizeiBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
+        self.add_view(AusweisView())
+        self.add_view(DienstausweisView())
         await self.tree.sync()
         print("Slash-Commands synchronisiert.")
 
@@ -107,9 +174,32 @@ bot = PolizeiBot()
 async def on_ready():
     print(f"✅ Eingeloggt als {bot.user}")
     await bot.change_presence(activity=discord.Game(name="Notruf 110 | Leitstelle Berlin"))
+    if not update_panel_loop.is_running():
+        update_panel_loop.start()
+
+@tasks.loop(minutes=5)
+async def update_panel_loop():
+    panel_db = load_panel_db()
+    db = load_db()
+    kanal = bot.get_channel(KANAL_DIENSTNUMMER_PANEL)
+    
+    if not kanal: return
+
+    if "panel_message_id" in panel_db:
+        try:
+            nachricht = await kanal.fetch_message(panel_db["panel_message_id"])
+            await nachricht.edit(embed=generate_panel_embed(db))
+        except discord.NotFound:
+            neue_nachricht = await kanal.send(embed=generate_panel_embed(db))
+            panel_db["panel_message_id"] = neue_nachricht.id
+            save_panel_db(panel_db)
+    else:
+        neue_nachricht = await kanal.send(embed=generate_panel_embed(db))
+        panel_db["panel_message_id"] = neue_nachricht.id
+        save_panel_db(panel_db)
 
 # ==========================================
-# SYSTEM 1: Der "Anwalt"-Trigger
+# SYSTEM 1: Anwalt Trigger
 # ==========================================
 anwalt_cooldowns = {}
 
@@ -134,8 +224,46 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ==========================================
-# SYSTEM 2: Personal & Bestrafungssystem
+# SYSTEM 2: Personal & Rollen-Überwachung
 # ==========================================
+
+@bot.event
+async def on_member_update(before: discord.Member, after: discord.Member):
+    if before.roles != after.roles:
+        rollen_vorher = [r.id for r in before.roles]
+        rollen_nachher = [r.id for r in after.roles]
+
+        hatte_hauptrolle = ROLLE_HAUPT_POLIZEI in rollen_vorher
+        hat_hauptrolle = ROLLE_HAUPT_POLIZEI in rollen_nachher
+
+        if not hatte_hauptrolle and hat_hauptrolle:
+            kanal = bot.get_channel(KANAL_EINSTELLUNG)
+            if kanal:
+                await kanal.send(f"👋 {after.mention} ist nun offiziell Teil der Fraktion!")
+
+        elif hatte_hauptrolle and not hat_hauptrolle:
+            db = load_db()
+            user_id = after.id
+            nummer_entfernt = None
+
+            for nummer, uid in list(db.items()):
+                if uid == user_id:
+                    del db[nummer]
+                    nummer_entfernt = nummer
+                    break
+
+            if nummer_entfernt:
+                save_db(db)
+                await update_panel_loop()
+                kanal = bot.get_channel(KANAL_DIENSTNUMMER)
+                if kanal:
+                    embed = discord.Embed(
+                        title="🚫 Dienstnummer entzogen",
+                        description=f"{after.mention} hat die Fraktion verlassen. Die Dienstnummer **{nummer_entfernt}** wurde wieder freigegeben.",
+                        color=0xFF0000
+                    )
+                    embed.set_footer(text=BRANDING_FOOTER)
+                    await kanal.send(embed=embed)
 
 @bot.tree.command(name="teamliste", description="Erstellt eine aktuelle Teamliste")
 async def teamliste(interaction: discord.Interaction):
@@ -151,8 +279,7 @@ async def teamliste(interaction: discord.Interaction):
             mitglieder = [m.mention for m in rolle.members]
             beschreibung += f"**{name}**\n{', '.join(mitglieder) if mitglieder else '*Aktuell niemand*'}\n\n"
         else:
-            beschreibung += f"**{name}**\n*Rolle nicht gefunden (ID falsch)*\n\n"
-            
+            beschreibung += f"**{name}**\n*Rolle nicht gefunden*\n\n"
     embed.description = beschreibung
     embed.set_footer(text=BRANDING_FOOTER)
     await interaction.followup.send(embed=embed)
@@ -161,25 +288,76 @@ async def teamliste(interaction: discord.Interaction):
 async def befoerderung(interaction: discord.Interaction, user: discord.Member, rang: discord.Role, begruendung: str = "Ausbildung bestanden"):
     kanal = bot.get_channel(KANAL_BEFOERDERUNG)
     if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
+    try: await user.add_roles(rang)
+    except: pass
     embed = discord.Embed(title="🔺 Beförderung", description=f"Dem Beamten {user.mention} wurde mit sofortiger Wirkung ein neuer Dienstgrad verliehen.", color=0x00FF00)
     embed.add_field(name="• Neuer Dienstgrad", value=rang.mention, inline=False)
     embed.add_field(name="• Begründung", value=begruendung, inline=False)
     embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
     embed.set_footer(text=BRANDING_FOOTER)
     await kanal.send(content=user.mention, embed=embed)
-    await interaction.response.send_message(f"✅ Gepostet.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Gepostet & Rolle vergeben.", ephemeral=True)
 
 @bot.tree.command(name="degradierung", description="Degradiert einen Beamten")
 async def degradierung(interaction: discord.Interaction, user: discord.Member, rang: discord.Role, begruendung: str = "Eigenwunsch"):
     kanal = bot.get_channel(KANAL_DEGRADIERUNG)
     if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
+    try: await user.add_roles(rang)
+    except: pass
     embed = discord.Embed(title="🔻 Degradierung", description=f"Der Beamte {user.mention} wurde mit sofortiger Wirkung degradiert.", color=0xFFA500)
     embed.add_field(name="• Neuer Dienstgrad", value=rang.mention, inline=False)
     embed.add_field(name="• Begründung", value=begruendung, inline=False)
     embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
     embed.set_footer(text=BRANDING_FOOTER)
     await kanal.send(content=user.mention, embed=embed)
-    await interaction.response.send_message(f"✅ Gepostet.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Gepostet & Rolle vergeben.", ephemeral=True)
+
+@bot.tree.command(name="einstellung", description="Stellt einen neuen Beamten ein")
+async def einstellung(interaction: discord.Interaction, user: discord.Member, rang: discord.Role, notiz: str = "Keine"):
+    kanal = bot.get_channel(KANAL_EINSTELLUNG)
+    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
+    try: await user.add_roles(rang)
+    except: pass
+    embed = discord.Embed(title="🎉 Neueinstellung", description=f"Wir begrüßen unseren neuen Kollegen!\nDer Anwärter {user.mention} wurde offiziell aufgenommen.", color=0x0000FF)
+    embed.add_field(name="• ZugeTEILTER Dienstgrad", value=rang.mention, inline=False)
+    embed.add_field(name="• Einstellungsnotiz", value=notiz, inline=False)
+    embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
+    embed.set_footer(text=BRANDING_FOOTER)
+    await kanal.send(content=user.mention, embed=embed)
+    await interaction.response.send_message(f"✅ Gepostet & Rolle vergeben.", ephemeral=True)
+
+@bot.tree.command(name="entlassung", description="Entlässt einen Beamten")
+async def entlassung(interaction: discord.Interaction, user: discord.Member, grund: str):
+    kanal = bot.get_channel(KANAL_ENTLASSUNG)
+    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
+    for _, rollen_id in TEAMLISTE_RAENGE:
+        rolle = interaction.guild.get_role(rollen_id)
+        if rolle and rolle in user.roles:
+            try: await user.remove_roles(rolle)
+            except: pass
+    try: await user.remove_roles(interaction.guild.get_role(ROLLE_HAUPT_POLIZEI))
+    except: pass
+
+    embed = discord.Embed(title="❌ Dienstentlassung", description=f"Der Beamte {user.mention} wurde mit sofortiger Wirkung vom Dienst freigestellt.", color=0xFF0000)
+    embed.add_field(name="• Entlassungsgrund", value=grund, inline=False)
+    embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
+    embed.set_footer(text=BRANDING_FOOTER)
+    await kanal.send(content=user.mention, embed=embed)
+    await interaction.response.send_message(f"✅ Gepostet & Rollen entfernt.", ephemeral=True)
+
+@bot.tree.command(name="warn", description="Verhängt eine Dienst-Warn")
+async def warn(interaction: discord.Interaction, user: discord.Member, grund: str, dauer_tage: int = 7):
+    kanal = bot.get_channel(KANAL_WARN)
+    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
+    ablauf_datum = datetime.datetime.now() + datetime.timedelta(days=dauer_tage)
+    ablauf_str = ablauf_datum.strftime("%A, %d. %B %Y at %H:%M")
+    embed = discord.Embed(title="⚠️ Dienst-Warn", description=f"Gegen den Beamten {user.mention} wurde eine Dienst-Warn verhängt.", color=0xFFA500)
+    embed.add_field(name="• Grund", value=grund, inline=False)
+    embed.add_field(name="• Dauer", value=f"{dauer_tage}d (Bis: {ablauf_str})", inline=False)
+    embed.add_field(name="Gezeichnet von", value=interaction.user.mention, inline=False)
+    embed.set_footer(text=BRANDING_FOOTER)
+    await kanal.send(content=user.mention, embed=embed)
+    await interaction.response.send_message(f"✅ Warnung gepostet.", ephemeral=True)
 
 @bot.tree.command(name="suspendierung", description="Suspendiert einen Beamten")
 async def suspendierung(interaction: discord.Interaction, user: discord.Member, grund: str):
@@ -192,73 +370,19 @@ async def suspendierung(interaction: discord.Interaction, user: discord.Member, 
     await kanal.send(content=user.mention, embed=embed)
     await interaction.response.send_message(f"✅ Suspendierung gepostet.", ephemeral=True)
 
-@bot.tree.command(name="entlassung", description="Entlässt einen Beamten")
-async def entlassung(interaction: discord.Interaction, user: discord.Member, grund: str):
-    kanal = bot.get_channel(KANAL_ENTLASSUNG)
-    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
-    embed = discord.Embed(title="❌ Dienstentlassung", description=f"Der Beamte {user.mention} wurde mit sofortiger Wirkung vom Dienst freigestellt.", color=0xFF0000)
-    embed.add_field(name="• Entlassungsgrund", value=grund, inline=False)
-    embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
-    embed.set_footer(text=BRANDING_FOOTER)
-    await kanal.send(content=user.mention, embed=embed)
-    await interaction.response.send_message(f"✅ Gepostet.", ephemeral=True)
-
-@bot.tree.command(name="dienstsperre", description="Verhängt eine Dienst-Sperre gegen eine Person")
-@app_commands.describe(user="Die Person", grund="Grund für die Sperre", dauer_tage="Dauer in Tagen")
+@bot.tree.command(name="dienstsperre", description="Verhängt eine Dienst-Sperre")
 async def dienstsperre(interaction: discord.Interaction, user: discord.Member, grund: str, dauer_tage: int = 7):
     kanal = bot.get_channel(KANAL_SPERREN)
-    if not kanal: return await interaction.response.send_message("❌ Kanal für Sperren nicht konfiguriert.", ephemeral=True)
-    
+    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
     ablauf_datum = datetime.datetime.now() + datetime.timedelta(days=dauer_tage)
     ablauf_str = ablauf_datum.strftime("%A, %d. %B %Y at %H:%M")
-
-    embed = discord.Embed(
-        title="⛔ Dienst-Sperre", 
-        description=f"Gegen {user.mention} wurde eine Dienst-Sperre verhängt.\nBewerbungen des Nutzers werden für die angegebene Dauer nicht berücksichtigt.",
-        color=0xFF0000
-    )
+    embed = discord.Embed(title="⛔ Dienst-Sperre", description=f"Gegen {user.mention} wurde eine Dienst-Sperre verhängt.", color=0xFF0000)
     embed.add_field(name="• Grund", value=grund, inline=False)
     embed.add_field(name="• Dauer", value=f"{dauer_tage}d (Bis: {ablauf_str})", inline=False)
     embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
     embed.set_footer(text=BRANDING_FOOTER)
-    
     await kanal.send(content=user.mention, embed=embed)
     await interaction.response.send_message(f"✅ Sperre gepostet.", ephemeral=True)
-
-@bot.tree.command(name="einstellung", description="Stellt einen neuen Beamten ein")
-async def einstellung(interaction: discord.Interaction, user: discord.Member, rang: discord.Role, notiz: str = "Keine"):
-    kanal = bot.get_channel(KANAL_EINSTELLUNG)
-    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
-    embed = discord.Embed(title="🎉 Neueinstellung", description=f"Wir begrüßen unseren neuen Kollegen!\nDer Anwärter {user.mention} wurde offiziell aufgenommen.", color=0x0000FF)
-    embed.add_field(name="• ZugeTEILTER Dienstgrad", value=rang.mention, inline=False)
-    embed.add_field(name="• Einstellungsnotiz", value=notiz, inline=False)
-    embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
-    embed.set_footer(text=BRANDING_FOOTER)
-    await kanal.send(content=user.mention, embed=embed)
-    await interaction.response.send_message(f"✅ Gepostet.", ephemeral=True)
-
-@bot.tree.command(name="warn", description="Verhängt eine Dienst-Warn gegen einen Beamten")
-@app_commands.describe(user="Der Beamte", grund="Grund für die Warnung", dauer_tage="Dauer in Tagen (z.B. 7)")
-async def warn(interaction: discord.Interaction, user: discord.Member, grund: str, dauer_tage: int = 7):
-    kanal = bot.get_channel(KANAL_WARN)
-    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
-    
-    ablauf_datum = datetime.datetime.now() + datetime.timedelta(days=dauer_tage)
-    ablauf_str = ablauf_datum.strftime("%A, %d. %B %Y at %H:%M")
-
-    embed = discord.Embed(
-        title="⚠️ Dienst-Warn", 
-        description=f"Gegen den Beamten {user.mention} wurde eine Dienst-Warn verhängt.",
-        color=0xFFA500
-    )
-    embed.add_field(name="• Grund", value=grund, inline=False)
-    embed.add_field(name="• Dauer", value=f"{dauer_tage}d (Bis: {ablauf_str})", inline=False)
-    embed.add_field(name="Gezeichnet von", value=interaction.user.mention, inline=False)
-    embed.set_footer(text=BRANDING_FOOTER)
-    
-    await kanal.send(content=user.mention, embed=embed)
-    await interaction.response.send_message(f"✅ Warnung gepostet.", ephemeral=True)
-
 
 @bot.tree.command(name="dienstzeit", description="Stempelt dich in den Dienst ein oder aus")
 @app_commands.choices(aktion=[
@@ -268,23 +392,18 @@ async def warn(interaction: discord.Interaction, user: discord.Member, grund: st
 async def dienstzeit(interaction: discord.Interaction, aktion: app_commands.Choice[str]):
     kanal = bot.get_channel(KANAL_DIENSTZEIT)
     if not kanal: return await interaction.response.send_message("❌ Dienstzeit-Kanal nicht konfiguriert.", ephemeral=True)
-    
     if aktion.value == "ein":
         embed = discord.Embed(title="🟢 Dienstbeginn", description=f"{interaction.user.mention} hat den Dienst angetreten.", color=0x00FF00)
     else:
         embed = discord.Embed(title="🔴 Dienstende", description=f"{interaction.user.mention} hat den Dienst beendet.", color=0xFF0000)
-        
     embed.set_footer(text=BRANDING_FOOTER)
     embed.timestamp = datetime.datetime.now()
-    
     await kanal.send(embed=embed)
-    await interaction.response.send_message(f"✅ Dienstzeit ({aktion.name}) erfolgreich eingetragen.", ephemeral=True)
-
+    await interaction.response.send_message(f"✅ Eingetragen.", ephemeral=True)
 
 # ==========================================
-# SYSTEM 3: AUSWEIS-SYSTEM (Buttons & Modals)
+# SYSTEM 3: Ausweis System (Permanent!)
 # ==========================================
-
 class AusweisModal(discord.ui.Modal):
     def __init__(self, antrags_typ):
         super().__init__(title=f"Antrag: {antrags_typ}")
@@ -309,7 +428,7 @@ class AusweisModal(discord.ui.Modal):
 class AusweisDropdown(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="Personalausweis Beantragen", description="Beantrage einen Ingame Personalausweis", value="Personalausweis", emoji="🪪"),
+            discord.SelectOption(label="Personalausweis Beantragen", value="Personalausweis", emoji="🪪"),
             discord.SelectOption(label="Führerschein (PKW)", value="Führerschein PKW", emoji="🚗"),
             discord.SelectOption(label="Führerschein (LKW)", value="Führerschein LKW", emoji="🚚"),
             discord.SelectOption(label="Führerschein (Motorrad)", value="Führerschein Motorrad", emoji="🏍️"),
@@ -317,7 +436,6 @@ class AusweisDropdown(discord.ui.Select):
             discord.SelectOption(label="Großer Waffenschein", value="Großer Waffenschein", emoji="🔫")
         ]
         super().__init__(placeholder="Wähle eine Kategorie...", min_values=1, max_values=1, options=options)
-
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(AusweisModal(self.values[0]))
 
@@ -326,136 +444,95 @@ class AusweisView(discord.ui.View):
         super().__init__(timeout=None) 
         self.add_item(AusweisDropdown())
 
-# ==========================================
-# SYSTEM 4: DER PANEL-BUILDER
-# ==========================================
-
-class PanelButton(discord.ui.Button):
-    def __init__(self, label, style, emoji, panel_typ):
-        super().__init__(label=label, style=style, emoji=emoji, custom_id=f"panel_btn_{panel_typ}")
-        self.panel_typ = panel_typ
-
-    async def callback(self, interaction: discord.Interaction):
-        if self.panel_typ == "ausweis":
-            embed = discord.Embed(title="🪪 Kategorie wählen", description="Bitte wähle aus dem Menü unten aus, welchen Ausweis du beantragen möchtest.", color=0x9B59B6)
-            await interaction.response.send_message(embed=embed, view=AusweisView(), ephemeral=True)
-        else:
-            await interaction.response.send_message("Dieser Button hat noch keine Funktion.", ephemeral=True)
-
-class PanelView(discord.ui.View):
-    def __init__(self, label, style, emoji, panel_typ):
-        super().__init__(timeout=None)
-        self.add_item(PanelButton(label, style, emoji, panel_typ))
-
-@bot.tree.command(name="panel_builder", description="Erstellt ein individuelles Panel (Nur für Admins)")
+@bot.tree.command(name="panel_builder", description="Erstellt ein Ausweis-Panel (Nur für Admins)")
 @app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(
-    titel="Der Titel des Panels (z.B. Ausweis-Antrag)",
-    beschreibung="Der Text unter dem Titel",
-    farbe="Hex-Farbe (z.B. #9B59B6 für Lila, #0000FF für Blau)",
-    button_text="Was auf dem Button stehen soll",
-    button_typ="Was der Button machen soll",
-    emoji="Ein Emoji für den Button (optional)"
-)
-@app_commands.choices(button_typ=[
-    app_commands.Choice(name="Ausweis-Antrag öffnen", value="ausweis"),
-    app_commands.Choice(name="Einfacher Info-Button", value="info")
-])
-async def panel_builder(
-    interaction: discord.Interaction, 
-    titel: str, 
-    beschreibung: str, 
-    farbe: str, 
-    button_text: str, 
-    button_typ: app_commands.Choice[str],
-    emoji: str = "📝"
-):
-    try:
-        farbe_int = int(farbe.strip('#'), 16)
-    except ValueError:
-        return await interaction.response.send_message("❌ Ungültige Farbe! Nutze z.B. #FF0000", ephemeral=True)
-
-    embed = discord.Embed(title=titel, description=beschreibung, color=farbe_int)
+async def panel_builder(interaction: discord.Interaction):
+    embed = discord.Embed(title="🪪 Ausweis beantragen", description="Klicke auf den Button unten, um deinen Personalausweis oder Führerschein zu beantragen.", color=0x9B59B6)
     embed.set_footer(text=BRANDING_FOOTER)
-    view = PanelView(label=button_text, style=discord.ButtonStyle.primary, emoji=emoji, panel_typ=button_typ.value)
+    button = discord.ui.Button(label="Antrag starten", style=discord.ButtonStyle.primary, emoji="📝", custom_id="btn_ausweis_start")
+    view = discord.ui.View()
+    view.add_item(button)
+    
+    async def button_callback(interaction: discord.Interaction):
+        embed = discord.Embed(title="🪪 Kategorie wählen", description="Bitte wähle aus dem Menü unten aus.", color=0x9B59B6)
+        await interaction.response.send_message(embed=embed, view=AusweisView(), ephemeral=True)
+    
+    bot.add_view(view)
+    button.callback = button_callback
+
     await interaction.response.send_message("✅ Panel erstellt!", ephemeral=True)
     await interaction.channel.send(embed=embed, view=view)
 
+# ==========================================
+# SYSTEM 4: Dienstausweis (Self-Service)
+# ==========================================
+class DienstausweisModal(discord.ui.Modal, title="Dienstausweis Registrierung"):
+    roblox_name = discord.ui.TextInput(label="Roblox Benutzername", placeholder="z.B. Max_Mustermann123", required=True, max_length=50)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        db = load_db()
+        user_id = interaction.user.id
+        
+        for nummer, uid in db.items():
+            if uid == user_id:
+                return await interaction.response.send_message(f"❌ Du hast bereits die Dienstnummer **{nummer}**.", ephemeral=True)
+
+        neue_nummer = get_next_free_number(db)
+        if not neue_nummer:
+            return await interaction.response.send_message("❌ Das Register ist voll! Alle 500 Dienstnummern sind vergeben.", ephemeral=True)
+
+        db[neue_nummer] = user_id
+        save_db(db)
+        await update_panel_loop()
+
+        await interaction.response.send_message(f"✅ Erfolgreich registriert!\nDeine neue Dienstnummer lautet: **{neue_nummer}**\nRoblox-Name: **{self.roblox_name.value}**", ephemeral=True)
+
+class DienstausweisView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(discord.ui.Button(label="Dienstausweis beantragen", style=discord.ButtonStyle.primary, custom_id="btn_dienstausweis", emoji="🪪"))
+
+@bot.event
+async def on_interaction(interaction: discord.Interaction):
+    if interaction.type == discord.InteractionType.component:
+        if interaction.data.get("custom_id") == "btn_dienstausweis":
+            await interaction.response.send_modal(DienstausweisModal())
+        elif interaction.data.get("custom_id") == "btn_ausweis_start":
+            embed = discord.Embed(title="🪪 Kategorie wählen", description="Bitte wähle aus dem Menü unten aus.", color=0x9B59B6)
+            await interaction.response.send_message(embed=embed, view=AusweisView(), ephemeral=True)
+
+@bot.tree.command(name="dienstausweis_setup", description="Erstellt das Panel für die Dienstausweis-Beantragung (Nur Admins)")
+@app_commands.checks.has_permissions(administrator=True)
+async def dienstausweis_setup(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🪪 Dienstnummer Beantragung",
+        description="Das zuständige Personalbüro bittet Sie, sich im polizeilichen Register einzutragen. Betätigen Sie den Button, um Ihren Dienstausweis zu generieren.\nBenutzen Sie hierfür ihren **Roblox-Benutzernamen**.",
+        color=0x5865F2
+    )
+    embed.set_footer(text=BRANDING_FOOTER)
+    await interaction.response.send_message("✅ Panel erstellt!", ephemeral=True)
+    await interaction.channel.send(embed=embed, view=DienstausweisView())
 
 # ==========================================
-# SYSTEM 5: Dienstnummern System & Führungs-Panel
+# SYSTEM 5: Dienstnummern Management
 # ==========================================
-
-DB_FILE = "dienstnummern.json"
-
-def load_db():
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-def save_db(data):
-    with open(DB_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-
-def get_next_free_number(db):
-    for i in range(1, 501):
-        nummer = f"BLP{i:02d}"
-        if nummer not in db.values():
-            return nummer
-    return None
-
 @bot.tree.command(name="dienstnummer_panel", description="Zeigt alle freien Dienstnummern an (Nur Führungsebene)")
 async def dienstnummer_panel(interaction: discord.Interaction):
     if not any(role.id in ROLLEN_DIENSTNUMMER_MANAGER for role in interaction.user.roles):
         return await interaction.response.send_message("❌ Du hast keine Berechtigung für dieses Panel.", ephemeral=True)
-
     db = load_db()
-    freie_nummern = []
-    for i in range(1, 501):
-        nummer = f"BLP{i:02d}"
-        if nummer not in db.values():
-            freie_nummern.append(nummer)
-
-    embed = discord.Embed(
-        title="🪪 Dienstnummern-Übersicht",
-        description="Hier siehst du alle aktuell **freien** Dienstnummern.",
-        color=0x9B59B6
-    )
-
-    if freie_nummern:
-        text_block = ""
-        for nummer in freie_nummern:
-            text_block += f"{nummer}, "
-            if len(text_block) > 900:
-                embed.add_field(name="Freie Nummern", value=text_block, inline=False)
-                text_block = ""
-        if text_block:
-            embed.add_field(name="Freie Nummern", value=text_block, inline=False)
-    else:
-        embed.description = "❌ Es sind aktuell keine Nummern mehr frei (alle 500 vergeben)!"
-
-    embed.set_footer(text=f"{BRANDING_FOOTER} | {len(freie_nummern)} freie Nummern")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
+    await interaction.response.send_message(embed=generate_panel_embed(db), ephemeral=True)
 
 @bot.tree.command(name="dienstnummer", description="Teilt einem Beamten eine Dienstnummer zu (Nur für die Führungsebene)")
-@app_commands.describe(user="Der Beamte", wunsch_nummer="Die gewünschte Nummer (z.B. BLP10). Lass leer für die nächste freie.")
 async def dienstnummer(interaction: discord.Interaction, user: discord.Member, wunsch_nummer: str = None):
     if not any(role.id in ROLLEN_DIENSTNUMMER_MANAGER for role in interaction.user.roles):
-        return await interaction.response.send_message("❌ Du hast keine Berechtigung, Dienstnummern zu vergeben.", ephemeral=True)
-
+        return await interaction.response.send_message("❌ Keine Berechtigung.", ephemeral=True)
     db = load_db()
     kanal = bot.get_channel(KANAL_DIENSTNUMMER)
     
-    alte_nummer_des_users = None
-    for nummer, uid in db.items():
-        if uid == user.id:
-            alte_nummer_des_users = nummer
-            break
-
-    zugewiesene_nummer = None
+    alte_nummer_des_users = next((n for n, i in db.items() if i == user.id), None)
     besitzer_der_nummer = None
+    zugewiesene_nummer = None
 
     if wunsch_nummer:
         wunsch_nummer = wunsch_nummer.upper().strip()
@@ -470,144 +547,38 @@ async def dienstnummer(interaction: discord.Interaction, user: discord.Member, w
                 if kanal:
                     try:
                         alter_user = await bot.fetch_user(besitzer_der_nummer)
-                        await kanal.send(f"⚠️ **Dienstnummern-Update:** {alter_user.mention}, deine Nummer **{wunsch_nummer}** wurde an {user.mention} übertragen. Du hast die neue Nummer **{neue_nummer_fuer_alten}** erhalten.")
-                    except:
-                        pass
+                        await kanal.send(f"⚠️ **Update:** {alter_user.mention}, deine Nummer **{wunsch_nummer}** wurde übertragen. Du hast nun **{neue_nummer_fuer_alten}**.")
+                    except: pass
         zugewiesene_nummer = wunsch_nummer
     else:
         zugewiesene_nummer = get_next_free_number(db)
         if not zugewiesene_nummer:
-            return await interaction.response.send_message("❌ Alle Dienstnummern (bis 500) sind vergeben!", ephemeral=True)
+            return await interaction.response.send_message("❌ Alle Nummern vergeben!", ephemeral=True)
 
-    if alte_nummer_des_users and alte_nummer_des_users in db:
+    if alte_nummer_des_users:
         del db[alte_nummer_des_users]
 
     db[zugewiesene_nummer] = user.id
     save_db(db)
+    await update_panel_loop()
 
-    embed = discord.Embed(
-        title="🪪 Dienstnummer zugewiesen",
-        description=f"Dem Beamten {user.mention} wurde die Dienstnummer **{zugewiesene_nummer}** zugeteilt.",
-        color=0x00FF00
-    )
+    embed = discord.Embed(title="🪪 Dienstnummer zugewiesen", description=f"Dem Beamten {user.mention} wurde die Dienstnummer **{zugewiesene_nummer}** zugeteilt.", color=0x00FF00)
     embed.set_footer(text=BRANDING_FOOTER)
-
     if besitzer_der_nummer:
-        embed.add_field(name="🔄 Übertragung", value=f"Die Nummer wurde dem vorherigen Besitzer entzogen. Dieser hat eine neue Nummer erhalten.", inline=False)
+        embed.add_field(name="🔄 Übertragung", value=f"Der vorherige Besitzer hat eine neue Nummer erhalten.", inline=False)
 
     await interaction.response.send_message(embed=embed)
-    if kanal:
-        await kanal.send(content=user.mention, embed=embed)
-
+    if kanal: await kanal.send(content=user.mention, embed=embed)
 
 @bot.tree.command(name="dienstnummer_info", description="Zeigt die Dienstnummer eines Beamten an")
-@app_commands.describe(user="Der Beamte")
 async def dienstnummer_info(interaction: discord.Interaction, user: discord.Member):
     db = load_db()
-    gefundene_nummer = None
-    for nummer, uid in db.items():
-        if uid == user.id:
-            gefundene_nummer = nummer
-            break
+    gefundene_nummer = next((n for n, i in db.items() if i == user.id), None)
 
     if gefundene_nummer:
         await interaction.response.send_message(f"👮‍♂️ {user.mention} hat die Dienstnummer **{gefundene_nummer}**.", ephemeral=True)
     else:
         await interaction.response.send_message(f"❌ {user.mention} hat noch keine Dienstnummer zugewiesen bekommen.", ephemeral=True)
-@bot.tree.command(name="befehle", description="Zeigt alle verfügbaren Befehle an")
-async def befehle(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="🤖 Leitstelle Berlin | Befehle",
-        description="Hier ist eine Übersicht aller Befehle:",
-        color=0x0000FF
-    )
-    embed.add_field(name="👮 Personal", value="`/einstellung`, `/beförderung`, `/degradierung`, `/entlassung`, `/warn`, `/suspendierung`, `/dienstsperre`", inline=False)
-    embed.add_field(name="🪪 Dienstnummern", value="`/dienstnummer`, `/dienstnummer_info`, `/dienstnummer_panel`", inline=False)
-    embed.add_field(name="🛠️ Systeme", value="`/teamliste`, `/dienstzeit`, `/panel_builder`", inline=False)
-    embed.set_footer(text=BRANDING_FOOTER)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-# ==========================================
-# SYSTEM 6: Dienstausweis Beantragung (Self-Service)
-# ==========================================
-
-@bot.tree.command(name="dienstausweis_setup", description="Erstellt das Panel für die Dienstausweis-Beantragung (Nur Admins)")
-@app_commands.checks.has_permissions(administrator=True)
-async def dienstausweis_setup(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="🪪 Dienstnummer Beantragung",
-        description="Das zuständige Personalbüro bittet Sie, sich im polizeilichen Register einzutragen. Betätigen Sie den Button, um Ihren Dienstausweis zu generieren.\nBenutzen Sie hierfür ihren **Roblox-Benutzernamen**.",
-        color=0x5865F2 # Blau wie auf deinem Bild
-    )
-    embed.set_footer(text="Leitstelle Berlin | Personalbüro")
-
-    # Der Button
-    button = discord.ui.Button(
-        label="Dienstausweis beantragen", 
-        style=discord.ButtonStyle.primary, 
-        custom_id="btn_dienstausweis"
-    )
-    view = discord.ui.View()
-    view.add_item(button)
-
-    await interaction.response.send_message("✅ Panel erfolgreich erstellt!", ephemeral=True)
-    await interaction.channel.send(embed=embed, view=view)
-
-# ==========================================
-# DAS FORMULAR (Modal), das sich beim Klick öffnet
-# ==========================================
-class DienstausweisModal(discord.ui.Modal, title="Dienstausweis Registrierung"):
-    roblox_name = discord.ui.TextInput(
-        label="Roblox Benutzername", 
-        placeholder="z.B. Max_Mustermann123", 
-        required=True,
-        max_length=50
-    )
-
-    async def on_submit(self, interaction: discord.Interaction):
-        db = load_db()
-        user_id = interaction.user.id
-        roblox_name = self.roblox_name.value
-
-        # Prüfen, ob der User schon eine Nummer hat
-        for nummer, uid in db.items():
-            if uid == user_id:
-                return await interaction.response.send_message(f"❌ Du hast bereits die Dienstnummer **{nummer}**.", ephemeral=True)
-
-        # Nächste freie Nummer suchen
-        neue_nummer = get_next_free_number(db)
-        if not neue_nummer:
-            return await interaction.response.send_message("❌ Das Register ist voll! Alle 500 Dienstnummern sind vergeben.", ephemeral=True)
-
-        # Nummer in der Datenbank speichern
-        db[neue_nummer] = user_id
-        save_db(db)
-
-        # Bestätigung für den User (Nur er sieht das)
-        await interaction.response.send_message(f"✅ Erfolgreich registriert!\nDeine neue Dienstnummer lautet: **{neue_nummer}**\nRoblox-Name: **{roblox_name}**", ephemeral=True)
-
-        # Optional: Eine Nachricht in den Dienstnummern-Kanal schicken, damit die Leitung es sieht
-        kanal = bot.get_channel(KANAL_DIENSTNUMMER)
-        if kanal:
-            embed = discord.Embed(
-                title="🪪 Neuer Dienstausweis generiert",
-                color=0x00FF00
-            )
-            embed.add_field(name="Beamter", value=interaction.user.mention, inline=True)
-            embed.add_field(name="Dienstnummer", value=f"**{neue_nummer}**", inline=True)
-            embed.add_field(name="Roblox-Name", value=roblox_name, inline=True)
-            embed.set_footer(text=BRANDING_FOOTER)
-            await kanal.send(embed=embed)
-
-# ==========================================
-# DER BUTTON-LISTENER (Damit der Button auch klickbar ist)
-# ==========================================
-@bot.event
-async def on_interaction(interaction: discord.Interaction):
-    if interaction.type == discord.InteractionType.component:
-        if interaction.data.get("custom_id") == "btn_dienstausweis":
-            # Öffnet das Formular (Modal)
-            await interaction.response.send_modal(DienstausweisModal())
 
 # ==========================================
 # Bot starten
