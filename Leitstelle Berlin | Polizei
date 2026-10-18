@@ -528,6 +528,88 @@ async def befehle(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ==========================================
+# SYSTEM 6: Dienstausweis Beantragung (Self-Service)
+# ==========================================
+
+@bot.tree.command(name="dienstausweis_setup", description="Erstellt das Panel für die Dienstausweis-Beantragung (Nur Admins)")
+@app_commands.checks.has_permissions(administrator=True)
+async def dienstausweis_setup(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🪪 Dienstnummer Beantragung",
+        description="Das zuständige Personalbüro bittet Sie, sich im polizeilichen Register einzutragen. Betätigen Sie den Button, um Ihren Dienstausweis zu generieren.\nBenutzen Sie hierfür ihren **Roblox-Benutzernamen**.",
+        color=0x5865F2 # Blau wie auf deinem Bild
+    )
+    embed.set_footer(text="Leitstelle Berlin | Personalbüro")
+
+    # Der Button
+    button = discord.ui.Button(
+        label="Dienstausweis beantragen", 
+        style=discord.ButtonStyle.primary, 
+        custom_id="btn_dienstausweis"
+    )
+    view = discord.ui.View()
+    view.add_item(button)
+
+    await interaction.response.send_message("✅ Panel erfolgreich erstellt!", ephemeral=True)
+    await interaction.channel.send(embed=embed, view=view)
+
+# ==========================================
+# DAS FORMULAR (Modal), das sich beim Klick öffnet
+# ==========================================
+class DienstausweisModal(discord.ui.Modal, title="Dienstausweis Registrierung"):
+    roblox_name = discord.ui.TextInput(
+        label="Roblox Benutzername", 
+        placeholder="z.B. Max_Mustermann123", 
+        required=True,
+        max_length=50
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        db = load_db()
+        user_id = interaction.user.id
+        roblox_name = self.roblox_name.value
+
+        # Prüfen, ob der User schon eine Nummer hat
+        for nummer, uid in db.items():
+            if uid == user_id:
+                return await interaction.response.send_message(f"❌ Du hast bereits die Dienstnummer **{nummer}**.", ephemeral=True)
+
+        # Nächste freie Nummer suchen
+        neue_nummer = get_next_free_number(db)
+        if not neue_nummer:
+            return await interaction.response.send_message("❌ Das Register ist voll! Alle 500 Dienstnummern sind vergeben.", ephemeral=True)
+
+        # Nummer in der Datenbank speichern
+        db[neue_nummer] = user_id
+        save_db(db)
+
+        # Bestätigung für den User (Nur er sieht das)
+        await interaction.response.send_message(f"✅ Erfolgreich registriert!\nDeine neue Dienstnummer lautet: **{neue_nummer}**\nRoblox-Name: **{roblox_name}**", ephemeral=True)
+
+        # Optional: Eine Nachricht in den Dienstnummern-Kanal schicken, damit die Leitung es sieht
+        kanal = bot.get_channel(KANAL_DIENSTNUMMER)
+        if kanal:
+            embed = discord.Embed(
+                title="🪪 Neuer Dienstausweis generiert",
+                color=0x00FF00
+            )
+            embed.add_field(name="Beamter", value=interaction.user.mention, inline=True)
+            embed.add_field(name="Dienstnummer", value=f"**{neue_nummer}**", inline=True)
+            embed.add_field(name="Roblox-Name", value=roblox_name, inline=True)
+            embed.set_footer(text=BRANDING_FOOTER)
+            await kanal.send(embed=embed)
+
+# ==========================================
+# DER BUTTON-LISTENER (Damit der Button auch klickbar ist)
+# ==========================================
+@bot.event
+async def on_interaction(interaction: discord.Interaction):
+    if interaction.type == discord.InteractionType.component:
+        if interaction.data.get("custom_id") == "btn_dienstausweis":
+            # Öffnet das Formular (Modal)
+            await interaction.response.send_modal(DienstausweisModal())
+
+# ==========================================
 # Bot starten
 # ==========================================
 if __name__ == "__main__":
