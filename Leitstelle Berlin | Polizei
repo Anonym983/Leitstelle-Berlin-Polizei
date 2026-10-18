@@ -1,0 +1,380 @@
+import discord
+from discord.ext import commands
+from discord import app_commands
+import time
+import datetime
+import os
+
+# =====================================================================
+# ⚙️ EINSTELLUNGEN (HIER ALLES AUSFÜLLEN!)
+# =====================================================================
+
+# Der Token wird jetzt sicher aus den Umgebungsvariablen gelesen.
+# Wenn du den Bot lokal testest, kannst du hier auch deinen Token eintragen:
+# TOKEN = "DEIN_TOKEN"
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+BRANDING_NAME = "Leitstelle Berlin"
+BRANDING_FOOTER = "Leitstelle Berlin | Polizei"
+
+# --- Rollen IDs ---
+ROLLE_ANWALT = 1561406761796247592 
+
+# --- Kanal IDs ---
+KANAL_ANWALT = 1561113869156352020
+KANAL_AUSWEIS = 1561401078300418121
+KANAL_DIENSTZEIT = 1561407060036427776
+
+# Kanal IDs für die Updates
+KANAL_EINSTELLUNG = 1561115548610199633    
+KANAL_BEFOERDERUNG = 1561115864177319936   
+KANAL_DEGRADIERUNG = 1561115982670471309   
+KANAL_WARN = 1561116201323733043           
+KANAL_SUSPENDIERUNG = 1561116388007878746  
+KANAL_ENTLASSUNG = 1561116526621364445     
+KANAL_SPERREN = 1561116717906657380        
+
+# 👇 TEAMLISTE (Alle IDs eingetragen)
+TEAMLISTE_RAENGE = [
+    ("Inspekteur", 1561139230988705914),
+    ("[PP] Polizeipräsident", 1561139458068320349),
+    ("[VPP] Vize Polizei Präsident", 1561139621633593455),
+    ("[LPV] Leitende Personalverwaltung", 1561139825070051348),
+    ("[PV] Personalverwaltung", 1561139929894092960),
+    ("[LPD] Leitender Polizeidirektor", 1561140168738603170),
+    ("[LKD] Leitender Kriminaldirektor", 1561140325974802602),
+    ("[LSD] Leitender SEK Direktor", 1561140440181506218),
+    ("[PD] Polizeidirektor", 1561140798597369957),
+    ("[KD] Kriminaldirektor", 1561140917409419367),
+    ("[SD] SEK Direktor", 1561141052478587002),
+    ("[PR] Polizeirat", 1561141205411168318),
+    ("[KA] Kripo Ausbilder", 1561143144299368479),
+    ("[SA] SEK Ausbilder", 1561143260842299412),
+    ("[PA] Polizei Ausbilder", 1561143365574336533),
+    ("[PHK] Polizei Hauptkommissar", 1561143539444752404),
+    ("[POK] Polizeioberskommissar", 1561143760786817085),
+    ("[PK] Polizeikommissar", 1561143936725028874),
+    ("[KHK] Kriminalhauptkommissar", 1561144156061962260),
+    ("[KOK] Kriminaloberkommissar", 1561144421263740928),
+    ("[KK] Kriminalkommissar", 1561145174317469856),
+    ("[KOA] Kripo Anwärter", 1561145321067913326),
+    ("[SEK] Einsatzleiter", 1561146093432209471),
+    ("[SEK] Verhandler", 1561146166970687549),
+    ("[SEK] Fahrzeugführer", 1561146259337650197),
+    ("[SEK] Sniper", 1561146387859513434),
+    ("[SEK] Beamter", 1561146470479167649),
+    ("[SEK] Anwärter", 1561146568151793766),
+    ("[PHM] Polizeihauptmeister", 1561146826252619847),
+    ("[POM] Polizeiobermeister", 1561146956665856183),
+    ("[PM] Polizeimeister", 1561147088396357802),
+    ("[PMA] Polizeimeisteranwärter", 1561147205186748486)
+]
+
+# =====================================================================
+# AB HIER NICHTS MEHR ÄNDERN
+# =====================================================================
+
+if not TOKEN:
+    print("❌ FEHLER: Kein Token gefunden! Bitte setze die Umgebungsvariable DISCORD_TOKEN oder trage den Token direkt im Code ein.")
+    exit()
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+
+class PolizeiBot(commands.Bot):
+    def __init__(self):
+        super().__init__(command_prefix="!", intents=intents)
+
+    async def setup_hook(self):
+        # Synchronisiert die Slash-Commands mit Discord
+        await self.tree.sync()
+        print("Slash-Commands synchronisiert.")
+
+bot = PolizeiBot()
+
+@bot.event
+async def on_ready():
+    print(f"✅ Eingeloggt als {bot.user}")
+    await bot.change_presence(activity=discord.Game(name="Notruf 110 | Leitstelle Berlin"))
+
+# ==========================================
+# SYSTEM 1: Der "Anwalt"-Trigger
+# ==========================================
+anwalt_cooldowns = {}
+
+@bot.event
+async def on_message(message):
+    if message.author.bot: return
+    if message.channel.id == KANAL_ANWALT:
+        if "anwalt" in message.content.lower():
+            user_id = message.author.id
+            jetzt = time.time()
+            if user_id in anwalt_cooldowns and anwalt_cooldowns[user_id] - jetzt > 0:
+                minuten = int((anwalt_cooldowns[user_id] - jetzt) // 60)
+                await message.reply(f"⏳ Bitte warte noch **{minuten} Minuten**.", delete_after=10)
+                return
+            
+            anwalt_cooldowns[user_id] = jetzt + (15 * 60)
+            embed = discord.Embed(title="⚖️ Anwalt angefordert", description=f"Ein Anwalt wird für {message.author.mention} benötigt.\n\n<@&{ROLLE_ANWALT}>, bitte meldet euch!", color=0x0000FF)
+            embed.set_footer(text=BRANDING_FOOTER)
+            await message.reply(content=f"<@&{ROLLE_ANWALT}>", embed=embed)
+            try: await message.delete()
+            except: pass
+    await bot.process_commands(message)
+
+# ==========================================
+# SYSTEM 2: Personal & Bestrafungssystem
+# ==========================================
+
+@bot.tree.command(name="teamliste", description="Erstellt eine aktuelle Teamliste")
+async def teamliste(interaction: discord.Interaction):
+    await interaction.response.defer() 
+    guild = interaction.guild
+    embed = discord.Embed(title=f"👮‍♂️ Teamliste | {BRANDING_NAME}", color=0x0000FF)
+    if guild.icon: embed.set_thumbnail(url=guild.icon.url)
+    
+    beschreibung = ""
+    for name, rollen_id in TEAMLISTE_RAENGE:
+        rolle = guild.get_role(rollen_id)
+        if rolle:
+            mitglieder = [m.mention for m in rolle.members]
+            beschreibung += f"**{name}**\n{', '.join(mitglieder) if mitglieder else '*Aktuell niemand*'}\n\n"
+        else:
+            beschreibung += f"**{name}**\n*Rolle nicht gefunden (ID falsch)*\n\n"
+            
+    embed.description = beschreibung
+    embed.set_footer(text=BRANDING_FOOTER)
+    await interaction.followup.send(embed=embed)
+
+@bot.tree.command(name="beförderung", description="Befördert einen Beamten")
+async def befoerderung(interaction: discord.Interaction, user: discord.Member, rang: discord.Role, begruendung: str = "Ausbildung bestanden"):
+    kanal = bot.get_channel(KANAL_BEFOERDERUNG)
+    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
+    embed = discord.Embed(title="🔺 Beförderung", description=f"Dem Beamten {user.mention} wurde mit sofortiger Wirkung ein neuer Dienstgrad verliehen.", color=0x00FF00)
+    embed.add_field(name="• Neuer Dienstgrad", value=rang.mention, inline=False)
+    embed.add_field(name="• Begründung", value=begruendung, inline=False)
+    embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
+    embed.set_footer(text=BRANDING_FOOTER)
+    await kanal.send(content=user.mention, embed=embed)
+    await interaction.response.send_message(f"✅ Gepostet.", ephemeral=True)
+
+@bot.tree.command(name="degradierung", description="Degradiert einen Beamten")
+async def degradierung(interaction: discord.Interaction, user: discord.Member, rang: discord.Role, begruendung: str = "Eigenwunsch"):
+    kanal = bot.get_channel(KANAL_DEGRADIERUNG)
+    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
+    embed = discord.Embed(title="🔻 Degradierung", description=f"Der Beamte {user.mention} wurde mit sofortiger Wirkung degradiert.", color=0xFFA500)
+    embed.add_field(name="• Neuer Dienstgrad", value=rang.mention, inline=False)
+    embed.add_field(name="• Begründung", value=begruendung, inline=False)
+    embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
+    embed.set_footer(text=BRANDING_FOOTER)
+    await kanal.send(content=user.mention, embed=embed)
+    await interaction.response.send_message(f"✅ Gepostet.", ephemeral=True)
+
+@bot.tree.command(name="suspendierung", description="Suspendiert einen Beamten")
+async def suspendierung(interaction: discord.Interaction, user: discord.Member, grund: str):
+    kanal = bot.get_channel(KANAL_SUSPENDIERUNG)
+    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
+    embed = discord.Embed(title="🚨 Suspendierung", description=f"Der Beamte {user.mention} wurde bis auf Weiteres suspendiert.", color=0xFF0000)
+    embed.add_field(name="• Grund", value=grund, inline=False)
+    embed.add_field(name="Gezeichnet von", value=interaction.user.mention, inline=False)
+    embed.set_footer(text=BRANDING_FOOTER)
+    await kanal.send(content=user.mention, embed=embed)
+    await interaction.response.send_message(f"✅ Suspendierung gepostet.", ephemeral=True)
+
+@bot.tree.command(name="entlassung", description="Entlässt einen Beamten")
+async def entlassung(interaction: discord.Interaction, user: discord.Member, grund: str):
+    kanal = bot.get_channel(KANAL_ENTLASSUNG)
+    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
+    embed = discord.Embed(title="❌ Dienstentlassung", description=f"Der Beamte {user.mention} wurde mit sofortiger Wirkung vom Dienst freigestellt.", color=0xFF0000)
+    embed.add_field(name="• Entlassungsgrund", value=grund, inline=False)
+    embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
+    embed.set_footer(text=BRANDING_FOOTER)
+    await kanal.send(content=user.mention, embed=embed)
+    await interaction.response.send_message(f"✅ Gepostet.", ephemeral=True)
+
+@bot.tree.command(name="dienstsperre", description="Verhängt eine Dienst-Sperre gegen eine Person")
+@app_commands.describe(user="Die Person", grund="Grund für die Sperre", dauer_tage="Dauer in Tagen")
+async def dienstsperre(interaction: discord.Interaction, user: discord.Member, grund: str, dauer_tage: int = 7):
+    kanal = bot.get_channel(KANAL_SPERREN)
+    if not kanal: return await interaction.response.send_message("❌ Kanal für Sperren nicht konfiguriert.", ephemeral=True)
+    
+    ablauf_datum = datetime.datetime.now() + datetime.timedelta(days=dauer_tage)
+    ablauf_str = ablauf_datum.strftime("%A, %d. %B %Y at %H:%M")
+
+    embed = discord.Embed(
+        title="⛔ Dienst-Sperre", 
+        description=f"Gegen {user.mention} wurde eine Dienst-Sperre verhängt.\nBewerbungen des Nutzers werden für die angegebene Dauer nicht berücksichtigt.",
+        color=0xFF0000
+    )
+    embed.add_field(name="• Grund", value=grund, inline=False)
+    embed.add_field(name="• Dauer", value=f"{dauer_tage}d (Bis: {ablauf_str})", inline=False)
+    embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
+    embed.set_footer(text=BRANDING_FOOTER)
+    
+    await kanal.send(content=user.mention, embed=embed)
+    await interaction.response.send_message(f"✅ Sperre gepostet.", ephemeral=True)
+
+@bot.tree.command(name="einstellung", description="Stellt einen neuen Beamten ein")
+async def einstellung(interaction: discord.Interaction, user: discord.Member, rang: discord.Role, notiz: str = "Keine"):
+    kanal = bot.get_channel(KANAL_EINSTELLUNG)
+    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
+    embed = discord.Embed(title="🎉 Neueinstellung", description=f"Wir begrüßen unseren neuen Kollegen!\nDer Anwärter {user.mention} wurde offiziell aufgenommen.", color=0x0000FF)
+    embed.add_field(name="• ZugeTEILTER Dienstgrad", value=rang.mention, inline=False)
+    embed.add_field(name="• Einstellungsnotiz", value=notiz, inline=False)
+    embed.add_field(name="Gezeichnet von der Direktion", value=interaction.user.mention, inline=False)
+    embed.set_footer(text=BRANDING_FOOTER)
+    await kanal.send(content=user.mention, embed=embed)
+    await interaction.response.send_message(f"✅ Gepostet.", ephemeral=True)
+
+# --- DIENST-WARN ---
+@bot.tree.command(name="warn", description="Verhängt eine Dienst-Warn gegen einen Beamten")
+@app_commands.describe(user="Der Beamte", grund="Grund für die Warnung", dauer_tage="Dauer in Tagen (z.B. 7)")
+async def warn(interaction: discord.Interaction, user: discord.Member, grund: str, dauer_tage: int = 7):
+    kanal = bot.get_channel(KANAL_WARN)
+    if not kanal: return await interaction.response.send_message("❌ Kanal nicht konfiguriert.", ephemeral=True)
+    
+    ablauf_datum = datetime.datetime.now() + datetime.timedelta(days=dauer_tage)
+    ablauf_str = ablauf_datum.strftime("%A, %d. %B %Y at %H:%M")
+
+    embed = discord.Embed(
+        title="⚠️ Dienst-Warn", 
+        description=f"Gegen den Beamten {user.mention} wurde eine Dienst-Warn verhängt.",
+        color=0xFFA500
+    )
+    embed.add_field(name="• Grund", value=grund, inline=False)
+    embed.add_field(name="• Dauer", value=f"{dauer_tage}d (Bis: {ablauf_str})", inline=False)
+    embed.add_field(name="Gezeichnet von", value=interaction.user.mention, inline=False)
+    embed.set_footer(text=BRANDING_FOOTER)
+    
+    await kanal.send(content=user.mention, embed=embed)
+    await interaction.response.send_message(f"✅ Warnung gepostet.", ephemeral=True)
+
+
+@bot.tree.command(name="dienstzeit", description="Stempelt dich in den Dienst ein oder aus")
+@app_commands.choices(aktion=[
+    app_commands.Choice(name="Einstempeln (Dienstbeginn)", value="ein"),
+    app_commands.Choice(name="Ausstempeln (Dienstende)", value="aus")
+])
+async def dienstzeit(interaction: discord.Interaction, aktion: app_commands.Choice[str]):
+    kanal = bot.get_channel(KANAL_DIENSTZEIT)
+    if not kanal: return await interaction.response.send_message("❌ Dienstzeit-Kanal nicht konfiguriert.", ephemeral=True)
+    
+    if aktion.value == "ein":
+        embed = discord.Embed(title="🟢 Dienstbeginn", description=f"{interaction.user.mention} hat den Dienst angetreten.", color=0x00FF00)
+    else:
+        embed = discord.Embed(title="🔴 Dienstende", description=f"{interaction.user.mention} hat den Dienst beendet.", color=0xFF0000)
+        
+    embed.set_footer(text=BRANDING_FOOTER)
+    embed.timestamp = datetime.datetime.now()
+    
+    await kanal.send(embed=embed)
+    await interaction.response.send_message(f"✅ Dienstzeit ({aktion.name}) erfolgreich eingetragen.", ephemeral=True)
+
+
+# ==========================================
+# SYSTEM 4: AUSWEIS-SYSTEM (Buttons & Modals)
+# ==========================================
+
+class AusweisModal(discord.ui.Modal):
+    def __init__(self, antrags_typ):
+        super().__init__(title=f"Antrag: {antrags_typ}")
+        self.antrags_typ = antrags_typ
+        self.name = discord.ui.TextInput(label="Ingame Name", placeholder="z.B. Max Mustermann", required=True)
+        self.geburtstag = discord.ui.TextInput(label="Geburtsdatum", placeholder="z.B. 01.01.2000", required=True)
+        self.roblox_name = discord.ui.TextInput(label="Roblox Name", placeholder="z.B. @max_muster", required=True)
+        self.add_item(self.name)
+        self.add_item(self.geburtstag)
+        self.add_item(self.roblox_name)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        kanal = bot.get_channel(KANAL_AUSWEIS)
+        embed = discord.Embed(title=f"🪪 {self.antrags_typ}", color=0x9B59B6)
+        embed.add_field(name="Name", value=self.name.value, inline=False)
+        embed.add_field(name="Geburtsdatum", value=self.geburtstag.value, inline=False)
+        embed.add_field(name="Roblox Name", value=self.roblox_name.value, inline=False)
+        embed.set_footer(text=BRANDING_FOOTER)
+        await kanal.send(content=f"Antrag von {interaction.user.mention}", embed=embed)
+        await interaction.response.send_message("✅ Dein Antrag wurde eingereicht!", ephemeral=True)
+
+class AusweisDropdown(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Personalausweis Beantragen", description="Beantrage einen Ingame Personalausweis", value="Personalausweis", emoji="🪪"),
+            discord.SelectOption(label="Führerschein (PKW)", value="Führerschein PKW", emoji="🚗"),
+            discord.SelectOption(label="Führerschein (LKW)", value="Führerschein LKW", emoji="🚚"),
+            discord.SelectOption(label="Führerschein (Motorrad)", value="Führerschein Motorrad", emoji="🏍️"),
+            discord.SelectOption(label="Kleiner Waffenschein", value="Kleiner Waffenschein", emoji="🔫"),
+            discord.SelectOption(label="Großer Waffenschein", value="Großer Waffenschein", emoji="🔫")
+        ]
+        super().__init__(placeholder="Wähle eine Kategorie...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AusweisModal(self.values[0]))
+
+class AusweisView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None) 
+        self.add_item(AusweisDropdown())
+
+# ==========================================
+# SYSTEM 5: DER PANEL-BUILDER
+# ==========================================
+
+class PanelButton(discord.ui.Button):
+    def __init__(self, label, style, emoji, panel_typ):
+        super().__init__(label=label, style=style, emoji=emoji, custom_id=f"panel_btn_{panel_typ}")
+        self.panel_typ = panel_typ
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.panel_typ == "ausweis":
+            embed = discord.Embed(title="🪪 Kategorie wählen", description="Bitte wähle aus dem Menü unten aus, welchen Ausweis du beantragen möchtest.", color=0x9B59B6)
+            await interaction.response.send_message(embed=embed, view=AusweisView(), ephemeral=True)
+        else:
+            await interaction.response.send_message("Dieser Button hat noch keine Funktion.", ephemeral=True)
+
+class PanelView(discord.ui.View):
+    def __init__(self, label, style, emoji, panel_typ):
+        super().__init__(timeout=None)
+        self.add_item(PanelButton(label, style, emoji, panel_typ))
+
+@bot.tree.command(name="panel_builder", description="Erstellt ein individuelles Panel (Nur für Admins)")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(
+    titel="Der Titel des Panels (z.B. Ausweis-Antrag)",
+    beschreibung="Der Text unter dem Titel",
+    farbe="Hex-Farbe (z.B. #9B59B6 für Lila, #0000FF für Blau)",
+    button_text="Was auf dem Button stehen soll",
+    button_typ="Was der Button machen soll",
+    emoji="Ein Emoji für den Button (optional)"
+)
+@app_commands.choices(button_typ=[
+    app_commands.Choice(name="Ausweis-Antrag öffnen", value="ausweis"),
+    app_commands.Choice(name="Einfacher Info-Button", value="info")
+])
+async def panel_builder(
+    interaction: discord.Interaction, 
+    titel: str, 
+    beschreibung: str, 
+    farbe: str, 
+    button_text: str, 
+    button_typ: app_commands.Choice[str],
+    emoji: str = "📝"
+):
+    try:
+        farbe_int = int(farbe.strip('#'), 16)
+    except ValueError:
+        return await interaction.response.send_message("❌ Ungültige Farbe! Nutze z.B. #FF0000", ephemeral=True)
+
+    embed = discord.Embed(title=titel, description=beschreibung, color=farbe_int)
+    embed.set_footer(text=BRANDING_FOOTER)
+    view = PanelView(label=button_text, style=discord.ButtonStyle.primary, emoji=emoji, panel_typ=button_typ.value)
+    await interaction.response.send_message("✅ Panel erstellt!", ephemeral=True)
+    await interaction.channel.send(embed=embed, view=view)
+
+
+# ==========================================
+# Bot starten
+# ==========================================
+if __name__ == "__main__":
+    bot.run(TOKEN)
