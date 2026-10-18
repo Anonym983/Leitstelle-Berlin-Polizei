@@ -4,14 +4,11 @@ from discord import app_commands
 import time
 import datetime
 import os
+import json
 
 # =====================================================================
 # ⚙️ EINSTELLUNGEN (HIER ALLES AUSFÜLLEN!)
 # =====================================================================
-
-# Der Token wird jetzt sicher aus den Umgebungsvariablen gelesen.
-# Wenn du den Bot lokal testest, kannst du hier auch deinen Token eintragen:
-# TOKEN = "DEIN_TOKEN"
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 BRANDING_NAME = "Leitstelle Berlin"
@@ -34,7 +31,21 @@ KANAL_SUSPENDIERUNG = 1561116388007878746
 KANAL_ENTLASSUNG = 1561116526621364445     
 KANAL_SPERREN = 1561116717906657380        
 
-# 👇 TEAMLISTE (Alle IDs eingetragen)
+# Kanal, wo die Dienstnummern-Zuweisungen gepostet werden
+KANAL_DIENSTNUMMER = 1561115548610199633 
+
+# Rollen, die Dienstnummern vergeben dürfen (Die komplette Führungsebene)
+ROLLEN_DIENSTNUMMER_MANAGER = [
+    1561139230988705914, # Inspekteur
+    1561139458068320349, # [PP] Polizeipräsident
+    1561139621633593455, # [VPP] Vize Polizei Präsident
+    1561139825070051348, # [LPV] Leitende Personalverwaltung
+    1561139929894092960, # [PV] Personalverwaltung
+    1561140168738603170, # [LPD] Leitender Polizeidirektor
+    1561140325974802602, # [LKD] Leitender Kriminaldirektor
+    1561140440181506218  # [LSD] Leitender SEK Direktor
+]
+
 TEAMLISTE_RAENGE = [
     ("Inspekteur", 1561139230988705914),
     ("[PP] Polizeipräsident", 1561139458068320349),
@@ -75,7 +86,7 @@ TEAMLISTE_RAENGE = [
 # =====================================================================
 
 if not TOKEN:
-    print("❌ FEHLER: Kein Token gefunden! Bitte setze die Umgebungsvariable DISCORD_TOKEN oder trage den Token direkt im Code ein.")
+    print("❌ FEHLER: Kein Token gefunden!")
     exit()
 
 intents = discord.Intents.default()
@@ -87,7 +98,6 @@ class PolizeiBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
-        # Synchronisiert die Slash-Commands mit Discord
         await self.tree.sync()
         print("Slash-Commands synchronisiert.")
 
@@ -227,7 +237,6 @@ async def einstellung(interaction: discord.Interaction, user: discord.Member, ra
     await kanal.send(content=user.mention, embed=embed)
     await interaction.response.send_message(f"✅ Gepostet.", ephemeral=True)
 
-# --- DIENST-WARN ---
 @bot.tree.command(name="warn", description="Verhängt eine Dienst-Warn gegen einen Beamten")
 @app_commands.describe(user="Der Beamte", grund="Grund für die Warnung", dauer_tage="Dauer in Tagen (z.B. 7)")
 async def warn(interaction: discord.Interaction, user: discord.Member, grund: str, dauer_tage: int = 7):
@@ -273,7 +282,7 @@ async def dienstzeit(interaction: discord.Interaction, aktion: app_commands.Choi
 
 
 # ==========================================
-# SYSTEM 4: AUSWEIS-SYSTEM (Buttons & Modals)
+# SYSTEM 3: AUSWEIS-SYSTEM (Buttons & Modals)
 # ==========================================
 
 class AusweisModal(discord.ui.Modal):
@@ -318,7 +327,7 @@ class AusweisView(discord.ui.View):
         self.add_item(AusweisDropdown())
 
 # ==========================================
-# SYSTEM 5: DER PANEL-BUILDER
+# SYSTEM 4: DER PANEL-BUILDER
 # ==========================================
 
 class PanelButton(discord.ui.Button):
@@ -372,6 +381,151 @@ async def panel_builder(
     await interaction.response.send_message("✅ Panel erstellt!", ephemeral=True)
     await interaction.channel.send(embed=embed, view=view)
 
+
+# ==========================================
+# SYSTEM 5: Dienstnummern System & Führungs-Panel
+# ==========================================
+
+DB_FILE = "dienstnummern.json"
+
+def load_db():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_db(data):
+    with open(DB_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+def get_next_free_number(db):
+    for i in range(1, 501):
+        nummer = f"BLP{i:02d}"
+        if nummer not in db.values():
+            return nummer
+    return None
+
+@bot.tree.command(name="dienstnummer_panel", description="Zeigt alle freien Dienstnummern an (Nur Führungsebene)")
+async def dienstnummer_panel(interaction: discord.Interaction):
+    if not any(role.id in ROLLEN_DIENSTNUMMER_MANAGER for role in interaction.user.roles):
+        return await interaction.response.send_message("❌ Du hast keine Berechtigung für dieses Panel.", ephemeral=True)
+
+    db = load_db()
+    freie_nummern = []
+    for i in range(1, 501):
+        nummer = f"BLP{i:02d}"
+        if nummer not in db.values():
+            freie_nummern.append(nummer)
+
+    embed = discord.Embed(
+        title="🪪 Dienstnummern-Übersicht",
+        description="Hier siehst du alle aktuell **freien** Dienstnummern.",
+        color=0x9B59B6
+    )
+
+    if freie_nummern:
+        text_block = ""
+        for nummer in freie_nummern:
+            text_block += f"{nummer}, "
+            if len(text_block) > 900:
+                embed.add_field(name="Freie Nummern", value=text_block, inline=False)
+                text_block = ""
+        if text_block:
+            embed.add_field(name="Freie Nummern", value=text_block, inline=False)
+    else:
+        embed.description = "❌ Es sind aktuell keine Nummern mehr frei (alle 500 vergeben)!"
+
+    embed.set_footer(text=f"{BRANDING_FOOTER} | {len(freie_nummern)} freie Nummern")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="dienstnummer", description="Teilt einem Beamten eine Dienstnummer zu (Nur für die Führungsebene)")
+@app_commands.describe(user="Der Beamte", wunsch_nummer="Die gewünschte Nummer (z.B. BLP10). Lass leer für die nächste freie.")
+async def dienstnummer(interaction: discord.Interaction, user: discord.Member, wunsch_nummer: str = None):
+    if not any(role.id in ROLLEN_DIENSTNUMMER_MANAGER for role in interaction.user.roles):
+        return await interaction.response.send_message("❌ Du hast keine Berechtigung, Dienstnummern zu vergeben.", ephemeral=True)
+
+    db = load_db()
+    kanal = bot.get_channel(KANAL_DIENSTNUMMER)
+    
+    alte_nummer_des_users = None
+    for nummer, uid in db.items():
+        if uid == user.id:
+            alte_nummer_des_users = nummer
+            break
+
+    zugewiesene_nummer = None
+    besitzer_der_nummer = None
+
+    if wunsch_nummer:
+        wunsch_nummer = wunsch_nummer.upper().strip()
+        if not wunsch_nummer.startswith("BLP"):
+            wunsch_nummer = f"BLP{wunsch_nummer.zfill(2)}"
+        
+        if wunsch_nummer in db and db[wunsch_nummer] != user.id:
+            besitzer_der_nummer = db[wunsch_nummer]
+            neue_nummer_fuer_alten = get_next_free_number(db)
+            if neue_nummer_fuer_alten:
+                db[neue_nummer_fuer_alten] = besitzer_der_nummer
+                if kanal:
+                    try:
+                        alter_user = await bot.fetch_user(besitzer_der_nummer)
+                        await kanal.send(f"⚠️ **Dienstnummern-Update:** {alter_user.mention}, deine Nummer **{wunsch_nummer}** wurde an {user.mention} übertragen. Du hast die neue Nummer **{neue_nummer_fuer_alten}** erhalten.")
+                    except:
+                        pass
+        zugewiesene_nummer = wunsch_nummer
+    else:
+        zugewiesene_nummer = get_next_free_number(db)
+        if not zugewiesene_nummer:
+            return await interaction.response.send_message("❌ Alle Dienstnummern (bis 500) sind vergeben!", ephemeral=True)
+
+    if alte_nummer_des_users and alte_nummer_des_users in db:
+        del db[alte_nummer_des_users]
+
+    db[zugewiesene_nummer] = user.id
+    save_db(db)
+
+    embed = discord.Embed(
+        title="🪪 Dienstnummer zugewiesen",
+        description=f"Dem Beamten {user.mention} wurde die Dienstnummer **{zugewiesene_nummer}** zugeteilt.",
+        color=0x00FF00
+    )
+    embed.set_footer(text=BRANDING_FOOTER)
+
+    if besitzer_der_nummer:
+        embed.add_field(name="🔄 Übertragung", value=f"Die Nummer wurde dem vorherigen Besitzer entzogen. Dieser hat eine neue Nummer erhalten.", inline=False)
+
+    await interaction.response.send_message(embed=embed)
+    if kanal:
+        await kanal.send(content=user.mention, embed=embed)
+
+
+@bot.tree.command(name="dienstnummer_info", description="Zeigt die Dienstnummer eines Beamten an")
+@app_commands.describe(user="Der Beamte")
+async def dienstnummer_info(interaction: discord.Interaction, user: discord.Member):
+    db = load_db()
+    gefundene_nummer = None
+    for nummer, uid in db.items():
+        if uid == user.id:
+            gefundene_nummer = nummer
+            break
+
+    if gefundene_nummer:
+        await interaction.response.send_message(f"👮‍♂️ {user.mention} hat die Dienstnummer **{gefundene_nummer}**.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"❌ {user.mention} hat noch keine Dienstnummer zugewiesen bekommen.", ephemeral=True)
+@bot.tree.command(name="befehle", description="Zeigt alle verfügbaren Befehle an")
+async def befehle(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🤖 Leitstelle Berlin | Befehle",
+        description="Hier ist eine Übersicht aller Befehle:",
+        color=0x0000FF
+    )
+    embed.add_field(name="👮 Personal", value="`/einstellung`, `/beförderung`, `/degradierung`, `/entlassung`, `/warn`, `/suspendierung`, `/dienstsperre`", inline=False)
+    embed.add_field(name="🪪 Dienstnummern", value="`/dienstnummer`, `/dienstnummer_info`, `/dienstnummer_panel`", inline=False)
+    embed.add_field(name="🛠️ Systeme", value="`/teamliste`, `/dienstzeit`, `/panel_builder`", inline=False)
+    embed.set_footer(text=BRANDING_FOOTER)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ==========================================
 # Bot starten
