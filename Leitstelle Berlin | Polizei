@@ -330,6 +330,7 @@ HILFE = [
         ("Dienstausweis-Panel", "Dienstnummer selbst freischalten"),
         ("Ausweis-Panel", "Personalausweis, Führerschein, Waffenschein beantragen"),
         ("Platzverweis-Panel", "Platzverweis eintragen"),
+        ("Datenbank-Panel", "Dienstnummern & Roblox-Namen abfragen"),
         ("Wort „Anwalt“", "Im Anwalt-Kanal schreiben, um einen Anwalt zu rufen"),
     ]),
     ("🎓 Ausbilder", "ausbilder", [
@@ -348,7 +349,7 @@ HILFE = [
         ("/dienstnummer · /dienstnummer_freigeben · /dienstnummer_panel", "Dienstnummern verwalten"),
         ("/abgleich", "Nummern mit Rollen abgleichen"),
         ("/ausbildung_beenden", "Tracker eines Anwärters löschen"),
-        ("/ausweis_panel · /dienstausweis_setup · /platzverweis_panel · /anwalt_panel · /dienstzeit_panel · /ausbildung_panel",
+        ("/ausweis_panel · /dienstausweis_setup · /platzverweis_panel · /anwalt_panel · /dienstzeit_panel · /ausbildung_panel · /datenbank_panel",
          "Panels erstellen (Admin)"),
     ]),
 ]
@@ -745,6 +746,7 @@ class PolizeiBot(commands.Bot):
         self.add_view(AusbildungView())
         self.add_view(DienstzeitPanelView())
         self.add_view(AusbildungPanelView())
+        self.add_view(DatenbankView())  # NEU: Datenbank-Panel
         if GUILD_ID:
             g = discord.Object(id=GUILD_ID)
             self.tree.copy_global_to(guild=g)
@@ -1788,6 +1790,84 @@ class AntragView(discord.ui.View):
 async def ausweis_panel(interaction: discord.Interaction):
     await interaction.response.send_message("✅ Panel erstellt!", ephemeral=True)
     await interaction.channel.send(embed=text_embed("ausweis_panel"), view=AusweisPanelView())
+
+
+# ==========================================
+# NEU: POLIZEILICHE DATENBANK (TERMINAL-PANEL)
+# ==========================================
+class DatenbankAbfrageModal(discord.ui.Modal, title="Polizeiliches Register"):
+    suchbegriff = discord.ui.TextInput(
+        label="Dienstnummer oder Roblox-Name",
+        placeholder="z.B. BLP05 oder Max_Mustermann",
+        required=True,
+        max_length=50
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        eingabe = self.suchbegriff.value.strip()
+        
+        # Prüfen, ob es eine Dienstnummer ist
+        nummer_check = nummer_normalisieren(eingabe)
+        ergebnis = None
+        
+        if nummer_check:
+            r = db.execute("SELECT user_id, roblox FROM dienstnummern WHERE nummer=?", (nummer_check,)).fetchone()
+            if r:
+                ergebnis = r
+        else:
+            r = db.execute("SELECT user_id, roblox FROM dienstnummern WHERE LOWER(roblox)=?", (eingabe.lower(),)).fetchone()
+            if r:
+                ergebnis = r
+
+        if not ergebnis:
+            e = basis_embed("❌ Eintrag nicht gefunden", farbe=0xFF0000)
+            e.description = f"Für die Eingabe **`{eingabe}`** konnte kein Eintrag im Register gefunden werden.\nBitte überprüfe die Schreibweise."
+            return await interaction.followup.send(embed=e, ephemeral=True)
+
+        uid = ergebnis["user_id"]
+        roblox = ergebnis["roblox"] or "Nicht hinterlegt"
+        nummer = nummer_von(uid) or "Keine"
+        
+        member = interaction.guild.get_member(uid)
+        discord_name = member.mention if member else f"Verlassen (`{uid}`)"
+
+        e = basis_embed("💻 Polizeiliches Register", farbe=0x2B5BFF)
+        e.description = "Abfrage erfolgreich abgeschlossen. Hier sind die Daten des gesuchten Beamten:"
+        e.add_field(name="👤 Discord Account", value=discord_name, inline=False)
+        e.add_field(name="🪪 Dienstnummer", value=f"**{nummer}**", inline=True)
+        e.add_field(name="🎮 Roblox-Name", value=f"**{roblox}**", inline=True)
+        
+        await interaction.followup.send(embed=e, ephemeral=True)
+
+
+class DatenbankView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Registerabfrage starten", style=discord.ButtonStyle.secondary, emoji="🖥️", custom_id="polizei:datenbank:abfrage")
+    async def abfrage(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(DatenbankAbfrageModal())
+
+
+@bot.tree.command(name="datenbank_panel", description="Erstellt das Polizeiliche Datenbank-Panel (Nur Admins)")
+@app_commands.default_permissions(administrator=True)
+@app_commands.checks.has_permissions(administrator=True)
+async def datenbank_panel(interaction: discord.Interaction):
+    await interaction.response.send_message("✅ Datenbank-Panel erstellt!", ephemeral=True)
+    
+    e = basis_embed(
+        titel="💻 Polizeiliche Datenbank",
+        beschreibung=(
+            "Verwenden Sie dieses Terminal, um Dienstnummern anhand des **Roblox-Benutzernamens** "
+            "oder der **Dienstnummer** (z.B. BLP02) abzufragen.\n"
+            "Missbrauch der Datenbank wird disziplinarisch verfolgt.\n\n"
+            "▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+            "*Leitstelle Berlin | Polizei*"
+        ),
+        farbe=0x2B5BFF
+    )
+    await interaction.channel.send(embed=e, view=DatenbankView())
 
 
 if __name__ == "__main__":
