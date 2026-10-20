@@ -27,7 +27,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID", "1354357206698688542"))
 DATA_DIR = os.getenv("DATA_DIR", ".")
 
-BRANDING_NAME = "Leitstelle Berlin"
+BRANDING_NAME = "Leitstelle 🚔"
 BRANDING_FOOTER = "Leitstelle Berlin | Polizei"
 NUMMER_PREFIX = "BLP"
 MAX_NUMMERN = 500
@@ -168,7 +168,7 @@ TEXTE = {
         "titel": "💫 Neueinstellung",
         "farbe": 0x0000FF,
         "text": "Wir begrüßen unseren neuen Kollegen!\n"
-                "Der Anwärter {user}{tag} wurde offiziell in den Polizeidienst aufgenommen.\n\n"
+                "Der Anwärter {user}{tag} wurde offiziell von der Leitstelle aufgenommen herzlichen Glückwunsch.\n\n"
                 "• **Zugeteilter Dienstgrad:** {rang}\n"
                 "• **Dienstnummer:** Bitte über das Dienstausweis-Panel freischalten.\n"
                 "• **Einstellungsnotiz:** {notiz}\n\n"
@@ -176,7 +176,7 @@ TEXTE = {
     },
     # {user} {tag} {rang} {alterrang} {grund} {direktion}
     "befoerderung": {
-        "titel": "🔺 Beförderung",
+        "titel": "⬆️ Beförderung",
         "farbe": 0x00FF00,
         "text": "Dem Beamten {user}{tag} wurde mit sofortiger Wirkung ein neuer Dienstgrad verliehen.\n\n"
                 "• **Neuer Dienstgrad:** {rang}\n"
@@ -185,7 +185,7 @@ TEXTE = {
     },
     # {user} {tag} {rang} {alterrang} {grund} {direktion}
     "degradierung": {
-        "titel": "🔻 Degradierung",
+        "titel": "⬇️ Degradierung",
         "farbe": 0xFFA500,
         "text": "Der Beamte {user}{tag} wurde mit sofortiger Wirkung degradiert. Der Vorfall wurde aktenkundig gemacht.\n\n"
                 "• **Neuer Dienstgrad:** {rang}\n"
@@ -267,16 +267,16 @@ TEXTE = {
     "nummer_zugewiesen": {
         "titel": "🪪 Dienstnummer zugewiesen",
         "farbe": 0x00FF00,
-        "text": "Dem Beamten {user} wurde die Dienstnummer **{nummer}** zugeteilt.",
+        "text": "Dem Beamten {user} wurde die Dienstnummer **{nummer}** von der Leitstelle zugeteilt.",
     },
     # {user} {nummer} {grund}
     "nummer_entzogen": {
         "titel": "🚫 Dienstnummer entzogen",
         "farbe": 0xFF0000,
-        "text": "{user}: Die Dienstnummer **{nummer}** wurde wieder freigegeben.\n**Grund:** {grund}",
+        "text": "{user}: Die Dienstnummer **{nummer}** wurde von der Leitstelle wieder freigegeben.\n**Grund:** {grund}",
     },
     # {user} {rolle}
-    "anwalt_ruf": {
+    "anwalt": {
         "titel": "⚖️ Anwalt angefordert",
         "farbe": 0x0000FF,
         "text": "Ein Anwalt wird für {user} benötigt.\n\n{rolle}, bitte meldet euch!",
@@ -286,7 +286,7 @@ TEXTE = {
         "titel": "👨‍💼 Anwalt benötigt?",
         "farbe": 0x2B5BFF,
         "text": "Schreiben Sie einfach das Wort **\"Anwalt\"** in diesen Kanal, um die Rolle {rolle} "
-                "zu alarmieren und einen Anwalt anzufordern.\n\n*Pro Nutzer ist dies nur alle 15 Minuten möglich.*",
+                "zu alarmieren und einen Anwalt anzufordern.\n\n*Pro Nutzer ist dies nur alle 5 Minuten möglich.*",
     },
     "platzverweis_panel": {
         "titel": "🚫 Platzverweis ausstellen",
@@ -308,9 +308,9 @@ TEXTE = {
     "aktivitaetscheck": {
         "titel": "📢 Aktivitätscheck",
         "farbe": 0xFFA500,
-        "text": "Bitte bestätigt mit dem Button **Aktivität bestätigen** eure Aktivität.\n\n"
+        "text": "Bitte bestätigt mit dem Button **Aktivität bestätigen** eure Aktivität damit wir euch Upranks geben können.\n\n"
                 "⏳ **Frist:** {frist} ({relativ})\n\n"
-                "⚠️ Wer bis dahin nicht bestätigt hat, erhält automatisch eine Dienst-Warn.",
+                "⚠️ Wer bis dahin nicht bestätigt hat, erhält automatisch eine Dienst-Warn wer bei 2 Dienst Warns ist wir automatisch Entlassen.",
     },
     # {anzahl_ok} {anzahl_fehlt} {warn_info}
     "aktivitaet_ergebnis": {
