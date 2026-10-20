@@ -32,18 +32,26 @@ BRANDING_FOOTER = "Leitstelle Berlin | Polizei"
 NUMMER_PREFIX = "BLP"
 MAX_NUMMERN = 500
 
-AUTO_DIENSTNUMMER = False
-AUTO_NICKNAME = True
-AUTO_VERGABE_BEIM_START = False
+# Automatik-Schalter
+AUTO_DIENSTNUMMER = False        # False = Nummer muss über das Dienstausweis-Panel selbst beantragt werden
+AUTO_NICKNAME = True             # Nickname automatisch auf "BLP05 | Name" setzen
+AUTO_VERGABE_BEIM_START = False  # Beim Botstart allen Beamten ohne Nummer eine geben
+MELDUNG_PING = False             # True = Betroffene werden über der Meldung gepingt (wie im Screenshot). False = kein Ping
 
+# Aktivitätscheck
 AKTIVITAETSCHECK_AUTO_WARN = True
 AKTIVITAETSCHECK_WARN_TAGE = 7
 
+# Dienstzeit
+AUTO_AUSSTEMPELN_NACH_STUNDEN = 8   # Wer nicht ausstempelt, wird nach X Stunden automatisch ausgestempelt (0 = aus)
+
+# Wochenbericht
 WOCHENSOLL_STUNDEN = 2.0
-WOCHENBERICHT_TAG = 6
+WOCHENBERICHT_TAG = 6               # 0 = Montag ... 6 = Sonntag
 WOCHENBERICHT_UHRZEIT = (20, 0)
 ZEITZONE = "Europe/Berlin"
 
+# Ausbildungs-Tracker (max. 25 Module, Reihenfolge nach dem Start nicht mehr ändern!)
 AUSBILDUNGS_MODULE = [
     "Theorie / Rechtsgrundlagen",
     "Funkdisziplin",
@@ -53,21 +61,34 @@ AUSBILDUNGS_MODULE = [
     "Abschlussprüfung",
 ]
 
+# --- Rollen ---
 ROLLE_ANWALT = 1561406761796247592
 ROLLE_HAUPT_POLIZEI = 1561447435522539702
 ROLLE_AUSBILDUNG_ABSCHLUSS_PING = 1561139929894092960
 
+# Sonderrollen, die der Bot automatisch vergibt. Rollen-ID eintragen, 0 = Funktion aus.
+# Warn-Rollen: 1 aktive Warn = Warn 1, 2 aktive = Warn 2, 3 oder mehr = Warn 3. Läuft eine Warn ab, rutscht die Rolle runter.
+ROLLEN_WARN = [
+    1561306415904071812,  # Warn 1
+    1561306491879825468,  # Warn 2
+    1561306575958712370,  # Warn 3
+]
+ROLLE_SUSPENDIERT = 1561306288799883345  # bei /suspendierung vergeben, bei /suspendierung_aufheben entfernt
+ROLLE_ENTLASSEN = 1561306221343023141    # bei /entlassung vergeben, bei /einstellung wieder entfernt
+ROLLE_DIENSTSPERRE = 1561306075746140260 # bei /dienstsperre vergeben, nach Ablauf der Tage automatisch entfernt
+
 ROLLEN_FUEHRUNG = [
-    1561139230988705914,
-    1561139458068320349,
-    1561139621633593455,
-    1561139825070051348,
-    1561139929894092960,
-    1561140168738603170,
-    1561140325974802602,
-    1561140440181506218,
+    1561139230988705914,  # Inspekteur
+    1561139458068320349,  # [PP] Polizeipräsident
+    1561139621633593455,  # [VPP] Vize Polizei Präsident
+    1561139825070051348,  # [LPV] Leitende Personalverwaltung
+    1561139929894092960,  # [PV] Personalverwaltung
+    1561140168738603170,  # [LPD] Leitender Polizeidirektor
+    1561140325974802602,  # [LKD] Leitender Kriminaldirektor
+    1561140440181506218,  # [LSD] Leitender SEK Direktor
 ]
 
+# --- Kanäle ---
 KANAL_ANWALT = 1561113869156352020
 KANAL_AUSWEIS = 1561401078300418121
 KANAL_DIENSTZEIT = 1561407060036427776
@@ -82,7 +103,7 @@ KANAL_BEWERBUNGSSPERRE = KANAL_SPERREN
 KANAL_DIENSTNUMMER = 1561115548610199633
 KANAL_DIENSTNUMMER_PANEL = 1561407060036427776
 KANAL_WOCHENBERICHT = KANAL_DIENSTZEIT
-KANAL_AUSBILDUNG = 0
+KANAL_AUSBILDUNG = 0   # 0 = Tracker erscheint dort, wo der Befehl genutzt wird
 
 AUSWEIS_ROLLEN = {}
 
@@ -130,7 +151,19 @@ AUSWEIS_TYPEN = {
     "waffe_gross": ("Großer Waffenschein", "🔫"),
 }
 
+# =====================================================================
+# ✏️ TEXTE – HIER KANNST DU ALLE NACHRICHTEN SELBER ÄNDERN
+# =====================================================================
+# Jeder Eintrag hat "titel", "text" und "farbe". In {geschweiften Klammern} stehen Platzhalter,
+# die der Bot automatisch einsetzt. Markdown geht: **fett**, *kursiv*, `Code`, \n = neue Zeile.
+#
+#   {user}      betroffener Beamter (Erwähnung)      {tag}       " [BLP05]" (leer ohne Nummer)
+#   {direktion} wer den Befehl ausgeführt hat        {grund}     Grund / Begründung
+#   {rang}      neuer Dienstgrad                     {alterrang} bisheriger Dienstgrad
+#   {notiz}     Einstellungsnotiz                    {nummer}    Dienstnummer ohne Klammern
+#   {az}        Aktenzeichen                         {ablauf}    Ablaufdatum      {dauer} Dauer
 TEXTE = {
+    # {user} {tag} {rang} {notiz} {direktion}
     "einstellung": {
         "titel": "💫 Neueinstellung",
         "farbe": 0x0000FF,
@@ -141,6 +174,7 @@ TEXTE = {
                 "• **Einstellungsnotiz:** {notiz}\n\n"
                 "*Gezeichnet von der Direktion:* {direktion}",
     },
+    # {user} {tag} {rang} {alterrang} {grund} {direktion}
     "befoerderung": {
         "titel": "🔺 Beförderung",
         "farbe": 0x00FF00,
@@ -149,6 +183,7 @@ TEXTE = {
                 "• **Begründung:** {grund}\n\n"
                 "*Gezeichnet von der Direktion:* {direktion}",
     },
+    # {user} {tag} {rang} {alterrang} {grund} {direktion}
     "degradierung": {
         "titel": "🔻 Degradierung",
         "farbe": 0xFFA500,
@@ -157,6 +192,7 @@ TEXTE = {
                 "• **Begründung:** {grund}\n\n"
                 "*Gezeichnet von der Direktion:* {direktion}",
     },
+    # {user} {tag} {grund} {nummer} {direktion}
     "entlassung": {
         "titel": "❌ Dienstentlassung",
         "farbe": 0xFF0000,
@@ -164,6 +200,7 @@ TEXTE = {
                 "• **Entlassungsgrund:** {grund}\n\n"
                 "*Gezeichnet von der Direktion:* {direktion}",
     },
+    # Warn / Disziplinarmaßnahme: {user} {tag} {grund} {az} {ablauf} {dauer} {aktiv} {direktion}
     "disziplinar": {
         "titel": "⚠️ Disziplinarmaßnahme eingeleitet",
         "farbe": 0xFF0000,
@@ -174,6 +211,7 @@ TEXTE = {
                 "• **Aktive Maßnahmen:** {aktiv}\n\n"
                 "*Gezeichnet von:* {direktion}",
     },
+    # {user} {tag} {grund} {direktion}
     "suspendierung": {
         "titel": "🚨 Suspendierung",
         "farbe": 0xFF0000,
@@ -181,6 +219,14 @@ TEXTE = {
                 "• **Grund:** {grund}\n\n"
                 "*Gezeichnet von:* {direktion}",
     },
+    # {user} {tag} {direktion}
+    "suspendierung_aufgehoben": {
+        "titel": "✅ Suspendierung aufgehoben",
+        "farbe": 0x00FF00,
+        "text": "Die Suspendierung des Beamten {user}{tag} wurde aufgehoben.\n\n"
+                "*Gezeichnet von:* {direktion}",
+    },
+    # {user} {tag} {grund} {ablauf} {dauer} {direktion}
     "dienstsperre": {
         "titel": "⛔ Dienst-Sperre",
         "farbe": 0xFF0000,
@@ -189,6 +235,7 @@ TEXTE = {
                 "• **Dauer:** {dauer} (bis {ablauf})\n\n"
                 "*Gezeichnet von der Direktion:* {direktion}",
     },
+    # {user} {grund} {ablauf} {dauer} {direktion}
     "bewerbungssperre": {
         "titel": "⛔ Bewerbungssperre",
         "farbe": 0xFF0000,
@@ -198,31 +245,43 @@ TEXTE = {
                 "• **Dauer:** {dauer} (bis {ablauf})\n\n"
                 "*Gezeichnet von:* {direktion}",
     },
+    # {user}
     "dienstbeginn": {
         "titel": "🟢 Dienstbeginn",
         "farbe": 0x00FF00,
         "text": "{user} hat den Dienst angetreten.",
     },
+    # {user} {dauer}
     "dienstende": {
         "titel": "🔴 Dienstende",
         "farbe": 0xFF0000,
         "text": "{user} hat den Dienst beendet.\n\n• **Dauer:** {dauer}",
     },
+    # {user} {dauer} {stunden}
+    "dienstende_auto": {
+        "titel": "🔴 Automatisch ausgestempelt",
+        "farbe": 0xFFA500,
+        "text": "{user} wurde nach {stunden} Stunden automatisch ausgestempelt (Ausstempeln vergessen).\n\n• **Gewertete Dauer:** {dauer}",
+    },
+    # {user} {nummer}
     "nummer_zugewiesen": {
         "titel": "🪪 Dienstnummer zugewiesen",
         "farbe": 0x00FF00,
         "text": "Dem Beamten {user} wurde die Dienstnummer **{nummer}** zugeteilt.",
     },
+    # {user} {nummer} {grund}
     "nummer_entzogen": {
         "titel": "🚫 Dienstnummer entzogen",
         "farbe": 0xFF0000,
         "text": "{user}: Die Dienstnummer **{nummer}** wurde wieder freigegeben.\n**Grund:** {grund}",
     },
+    # {user} {rolle}
     "anwalt_ruf": {
         "titel": "⚖️ Anwalt angefordert",
         "farbe": 0x0000FF,
         "text": "Ein Anwalt wird für {user} benötigt.\n\n{rolle}, bitte meldet euch!",
     },
+    # {rolle}
     "anwalt_panel": {
         "titel": "👨‍💼 Anwalt benötigt?",
         "farbe": 0x2B5BFF,
@@ -235,6 +294,7 @@ TEXTE = {
         "text": "Betätigen Sie den Button, um einen Platzverweis für eine Person zu erfassen. "
                 "Die Angaben werden anschließend automatisch in diesem Kanal veröffentlicht.",
     },
+    # {person} {ort} {grund} {dauer} {beamter}
     "platzverweis": {
         "titel": "🚧 Platzverweis",
         "farbe": 0xFFA500,
@@ -244,6 +304,7 @@ TEXTE = {
                 "• **Dauer:** {dauer}\n\n"
                 "*Ausgestellt von:* {beamter}",
     },
+    # {frist} {relativ}
     "aktivitaetscheck": {
         "titel": "📢 Aktivitätscheck",
         "farbe": 0xFFA500,
@@ -251,6 +312,7 @@ TEXTE = {
                 "⏳ **Frist:** {frist} ({relativ})\n\n"
                 "⚠️ Wer bis dahin nicht bestätigt hat, erhält automatisch eine Dienst-Warn.",
     },
+    # {anzahl_ok} {anzahl_fehlt} {warn_info}
     "aktivitaet_ergebnis": {
         "titel": "📋 Aktivitätscheck beendet",
         "farbe": 0x0000FF,
@@ -259,6 +321,7 @@ TEXTE = {
                 "❌ **Nicht bestätigt:** {anzahl_fehlt}\n"
                 "{warn_info}",
     },
+    # {von} {bis} {gesamt} {anzahl} {soll}
     "wochenbericht": {
         "titel": "📊 Wochenbericht Dienstzeit",
         "farbe": 0x0000FF,
@@ -267,11 +330,13 @@ TEXTE = {
                 "• **Beamte:** {anzahl}\n"
                 "• **Mindestsoll:** {soll}",
     },
+    # {user} {ausbilder}
     "ausbildung": {
         "titel": "🎓 Ausbildung",
         "farbe": 0x0000FF,
         "text": "Ausbildungsfortschritt von {user}.\nZuständiger Ausbilder: {ausbilder}\n\nDie Ausbilder haken unten die bestandenen Module ab.",
     },
+    # {user}
     "ausbildung_fertig": {
         "titel": "🎉 Ausbildung abgeschlossen",
         "farbe": 0x00FF00,
@@ -284,7 +349,8 @@ TEXTE = {
                 "🟢 **Einstempeln** – Dienstbeginn\n"
                 "🔴 **Ausstempeln** – Dienstende\n"
                 "⏱️ **Meine Dienstzeit** – deine Zeiten der letzten 7 und 30 Tage\n"
-                "👮 **Wer ist im Dienst?** – aktuell eingestempelte Beamte",
+                "👮 **Wer ist im Dienst?** – Liste nur für dich\n\n"
+                "Die Liste unten aktualisiert sich automatisch.",
     },
     "ausbildung_panel": {
         "titel": "🎓 Ausbildung",
@@ -306,11 +372,13 @@ TEXTE = {
         "farbe": 0x9B59B6,
         "text": "Wähle unten aus, was du beantragen möchtest. Dein Antrag wird anschließend vom Personal geprüft.",
     },
+    # {typ} {id}
     "antrag_angenommen": {
         "titel": "✅ Antrag angenommen",
         "farbe": 0x00FF00,
         "text": "Dein Antrag **{typ}** (#{id}) wurde **angenommen**.",
     },
+    # {typ} {id} {grund}
     "antrag_abgelehnt": {
         "titel": "❌ Antrag abgelehnt",
         "farbe": 0xFF0000,
@@ -330,7 +398,7 @@ HILFE = [
         ("Dienstausweis-Panel", "Dienstnummer selbst freischalten"),
         ("Ausweis-Panel", "Personalausweis, Führerschein, Waffenschein beantragen"),
         ("Platzverweis-Panel", "Platzverweis eintragen"),
-        ("Datenbank-Panel", "Dienstnummern & Roblox-Namen abfragen"),
+        ("Datenbank-Panel", "Dienstnummern & Roblox-Namen abfragen (nur Beamte)"),
         ("Wort „Anwalt“", "Im Anwalt-Kanal schreiben, um einen Anwalt zu rufen"),
     ]),
     ("🎓 Ausbilder", "ausbilder", [
@@ -340,9 +408,10 @@ HILFE = [
     ("🛡️ Führung", "fuehrung", [
         ("/einstellung", "Beamten einstellen (Rang + Beamten-Rolle)"),
         ("/befoerderung · /degradierung", "Rang ändern (alte Rolle wird entfernt)"),
-        ("/entlassung", "Entlassen, Rollen entfernen, Nummer freigeben"),
-        ("/warn · /warns · /warn_entfernen", "Disziplinarmaßnahmen verwalten"),
-        ("/suspendierung · /dienstsperre", "Suspendierung bzw. Dienstsperre"),
+        ("/entlassung", "Entlassen, Rollen entfernen, Nummer freigeben, Entlassen-Rolle vergeben"),
+        ("/warn · /warns · /warn_entfernen", "Disziplinarmaßnahmen (Rollen Warn 1/2/3 automatisch)"),
+        ("/suspendierung · /suspendierung_aufheben", "Suspendierung mit Rolle"),
+        ("/dienstsperre · /dienstsperre_aufheben", "Dienstsperre mit Rolle (läuft automatisch ab)"),
         ("/bewerbungssperre · /bewerbungssperre_pruefen", "Bewerbungssperre für Nutzer"),
         ("/aktivitaetscheck", "Aktivitätscheck mit Frist starten"),
         ("/wochenbericht", "Wochenbericht sofort posten"),
@@ -354,6 +423,9 @@ HILFE = [
     ]),
 ]
 
+# =====================================================================
+# AB HIER NICHTS MEHR ÄNDERN
+# =====================================================================
 if not TOKEN:
     raise SystemExit("❌ FEHLER: Umgebungsvariable DISCORD_TOKEN fehlt!")
 
@@ -362,10 +434,11 @@ RANG_INFO = {rid: (name, gruppe) for name, rid, gruppe in TEAMLISTE_RAENGE}
 try:
     from zoneinfo import ZoneInfo
     TZ = ZoneInfo(ZEITZONE)
-except Exception:
+except Exception:  # z. B. Windows ohne tzdata
     TZ = datetime.timezone.utc
 WOCHENBERICHT_ZEIT = datetime.time(hour=WOCHENBERICHT_UHRZEIT[0], minute=WOCHENBERICHT_UHRZEIT[1], tzinfo=TZ)
 
+# --------------------------- Datenbank --------------------------------
 os.makedirs(DATA_DIR, exist_ok=True)
 db = sqlite3.connect(os.path.join(DATA_DIR, "polizei.db"))
 db.row_factory = sqlite3.Row
@@ -379,10 +452,12 @@ CREATE TABLE IF NOT EXISTS dienst_log (id INTEGER PRIMARY KEY AUTOINCREMENT, use
 CREATE TABLE IF NOT EXISTS aktivitaetschecks (id INTEGER PRIMARY KEY AUTOINCREMENT, message_id INTEGER, channel_id INTEGER, start REAL, frist REAL, abgeschlossen INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS aktivitaet_bestaetigt (check_id INTEGER, user_id INTEGER, PRIMARY KEY (check_id, user_id));
 CREATE TABLE IF NOT EXISTS bewerbungssperren (user_id INTEGER PRIMARY KEY, grund TEXT, ablauf REAL, von INTEGER);
+CREATE TABLE IF NOT EXISTS suspendierungen (user_id INTEGER PRIMARY KEY, grund TEXT, von INTEGER, seit REAL);
+CREATE TABLE IF NOT EXISTS dienstsperren (user_id INTEGER PRIMARY KEY, grund TEXT, von INTEGER, ablauf REAL);
 CREATE TABLE IF NOT EXISTS ausbildung (user_id INTEGER PRIMARY KEY, ausbilder_id INTEGER, gestartet REAL, message_id INTEGER, channel_id INTEGER, abgeschlossen INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS ausbildung_module (user_id INTEGER, modul INTEGER, erledigt REAL, von INTEGER, PRIMARY KEY (user_id, modul));
 """)
-try:
+try:  # Migration für Datenbanken aus Vorversionen
     db.execute("ALTER TABLE warns ADD COLUMN az TEXT")
 except sqlite3.OperationalError:
     pass
@@ -390,6 +465,7 @@ db.commit()
 
 
 def alte_json_importieren():
+    """Übernimmt Nummern aus der alten dienstnummern.json (nummer -> user_id)."""
     pfad = "dienstnummern.json"
     if not os.path.exists(pfad) or db.execute("SELECT 1 FROM dienstnummern LIMIT 1").fetchone():
         return
@@ -418,6 +494,7 @@ def setting_set(key, value):
                    (key, str(value)))
 
 
+# --------------------------- Dienstnummern-Logik -----------------------
 def alle_nummern():
     return [f"{NUMMER_PREFIX}{i:02d}" for i in range(1, MAX_NUMMERN + 1)]
 
@@ -462,6 +539,8 @@ def nummer_normalisieren(text):
 
 
 def nummer_zuweisen(user_id, wunsch=None, roblox=None):
+    """Gibt (nummer, verdraengt) zurück. verdraengt = (user_id, neue_nummer) oder None.
+    Wirft ValueError, wenn nichts frei ist."""
     alte = nummer_von(user_id)
     roblox = roblox or roblox_von(user_id)
     verdraengt = None
@@ -482,7 +561,7 @@ def nummer_zuweisen(user_id, wunsch=None, roblox=None):
                 return ziel, None
             besitzer = besitzer_von(ziel)
             if besitzer is not None:
-                ersatz = alte or naechste_freie()
+                ersatz = alte or naechste_freie()  # Tausch: Der Verdrängte bekommt meine alte Nummer
                 if not ersatz:
                     raise ValueError("Keine freie Nummer zum Tauschen vorhanden.")
                 besitzer_roblox = roblox_von(besitzer)
@@ -504,6 +583,7 @@ def nummer_freigeben(user_id):
     return nummer
 
 
+# --------------------------- Hilfsfunktionen ---------------------------
 def ist_fuehrung_member(m):
     return isinstance(m, discord.Member) and (
         m.guild_permissions.administrator or any(r.id in ROLLEN_FUEHRUNG for r in m.roles))
@@ -526,6 +606,11 @@ def hat_hauptrolle(m):
     return any(r.id == ROLLE_HAUPT_POLIZEI for r in m.roles)
 
 
+def ping(mention):
+    """Gibt die Erwähnung nur zurück, wenn MELDUNG_PING aktiv ist (sonst kein Ping über der Meldung)."""
+    return mention if MELDUNG_PING else None
+
+
 def basis_embed(titel, beschreibung=None, farbe=0x0000FF):
     e = discord.Embed(title=titel, description=beschreibung, color=farbe, timestamp=discord.utils.utcnow())
     e.set_footer(text=BRANDING_FOOTER)
@@ -533,6 +618,7 @@ def basis_embed(titel, beschreibung=None, farbe=0x0000FF):
 
 
 class _Sicher(dict):
+    """Unbekannte Platzhalter bleiben stehen, statt den Bot abstürzen zu lassen."""
     def __missing__(self, key):
         return "{" + key + "}"
 
@@ -568,6 +654,12 @@ def fmt_zeit(ts, stil="F"):
     return discord.utils.format_dt(datetime.datetime.fromtimestamp(ts, datetime.timezone.utc), stil)
 
 
+def hauptguild():
+    if GUILD_ID:
+        return bot.get_guild(GUILD_ID)
+    return bot.guilds[0] if bot.guilds else None
+
+
 async def senden(kanal_id, **kwargs):
     kanal = bot.get_channel(kanal_id)
     if kanal is None:
@@ -581,6 +673,7 @@ async def senden(kanal_id, **kwargs):
 
 
 async def rollen_aendern(member, add=(), remove=(), grund=""):
+    """Gibt None bei Erfolg zurück, sonst eine Fehlermeldung."""
     me = member.guild.me
     for r in list(add) + list(remove):
         if r >= me.top_role:
@@ -597,6 +690,37 @@ async def rollen_aendern(member, add=(), remove=(), grund=""):
     return None
 
 
+async def sonderrolle(member, rolle_id, geben, grund):
+    """Vergibt oder entfernt eine Sonderrolle (Warn/Suspendiert/Entlassen). None = ok oder Funktion aus."""
+    if not rolle_id or member is None:
+        return None
+    rolle = member.guild.get_role(rolle_id)
+    if rolle is None:
+        return f"Rolle {rolle_id} nicht gefunden"
+    if geben and rolle not in member.roles:
+        return await rollen_aendern(member, add=[rolle], grund=grund)
+    if not geben and rolle in member.roles:
+        return await rollen_aendern(member, remove=[rolle], grund=grund)
+    return None
+
+
+async def warn_rollen_setzen(user_id, grund):
+    """Setzt die passende Warn-Rolle (Warn 1/2/3) anhand der aktiven Warns. Gibt Fehlermeldung oder None zurück."""
+    g = hauptguild()
+    member = g.get_member(user_id) if g else None
+    if member is None or not any(ROLLEN_WARN):
+        return None
+    aktiv = db.execute("SELECT COUNT(*) c FROM warns WHERE user_id=? AND ablauf>?", (user_id, time.time())).fetchone()["c"]
+    ziel = None
+    if aktiv > 0 and hat_hauptrolle(member):
+        ziel = ROLLEN_WARN[min(aktiv, len(ROLLEN_WARN)) - 1]
+    fehler = None
+    for rid in ROLLEN_WARN:
+        f = await sonderrolle(member, rid, rid == ziel, grund)
+        fehler = fehler or f
+    return fehler
+
+
 NICK_RE = re.compile(rf"^{NUMMER_PREFIX}\d+\s*\|\s*")
 
 
@@ -607,7 +731,7 @@ async def nick_setzen(member, nummer):
     try:
         await member.edit(nick=f"{nummer} | {basis}"[:32], reason="Dienstnummer")
     except discord.HTTPException:
-        pass
+        pass  # z. B. Serverinhaber oder höhere Rolle
 
 
 async def nick_zuruecksetzen(member):
@@ -620,6 +744,7 @@ async def nick_zuruecksetzen(member):
         pass
 
 
+# --------------------------- Panel "freie Nummern" ---------------------
 def panel_embed():
     frei = freie_nummern()
     e = basis_embed("🪪 Dienstnummern-Übersicht (Live)", farbe=0x9B59B6)
@@ -652,18 +777,66 @@ async def panel_aktualisieren():
         print(f"⚠️ Panel konnte nicht aktualisiert werden: {e}")
 
 
+# --------------------------- Dienstzeit-Kern ---------------------------
+def dienstzeit_summe(user_id, seit):
+    total = 0.0
+    for r in db.execute("SELECT start, ende FROM dienst_log WHERE user_id=? AND ende>?", (user_id, seit)):
+        total += r["ende"] - max(r["start"], seit)
+    a = db.execute("SELECT start FROM dienst_aktiv WHERE user_id=?", (user_id,)).fetchone()
+    if a:
+        total += time.time() - max(a["start"], seit)
+    return total
+
+
+def dienst_beenden(user_id, ende=None):
+    """Stempelt aus und schreibt ins Log. Gibt die Dauer in Sekunden zurück (None, wenn nicht im Dienst)."""
+    a = db.execute("SELECT start FROM dienst_aktiv WHERE user_id=?", (user_id,)).fetchone()
+    if not a:
+        return None
+    ende = ende or time.time()
+    with db:
+        db.execute("DELETE FROM dienst_aktiv WHERE user_id=?", (user_id,))
+        db.execute("INSERT INTO dienst_log (user_id, start, ende) VALUES (?, ?, ?)", (user_id, a["start"], ende))
+    return max(ende - a["start"], 0)
+
+
+def dienstzeit_panel_embed():
+    e = text_embed("dienstzeit_panel")
+    rows = db.execute("SELECT user_id, start FROM dienst_aktiv ORDER BY start").fetchall()
+    zeilen = [f"<@{r['user_id']}>{nummer_tag(r['user_id'])} – seit {fmt_zeit(r['start'], 'R')}" for r in rows]
+    e.add_field(name=f"👮 Aktuell im Dienst ({len(rows)})",
+                value=("\n".join(zeilen) or "*Niemand ist eingestempelt.*")[:1024], inline=False)
+    return e
+
+
+async def dienstzeit_panel_aktualisieren():
+    mid, cid = setting_get("dz_panel_message"), setting_get("dz_panel_channel")
+    if not mid or not cid:
+        return
+    kanal = bot.get_channel(int(cid))
+    if kanal is None:
+        return
+    try:
+        msg = await kanal.fetch_message(int(mid))
+        await msg.edit(embed=dienstzeit_panel_embed())
+    except discord.HTTPException:
+        pass
+
+
+# --------------------------- Automatik-Kernfunktionen ------------------
 async def nummer_sicherstellen(member):
+    """Vergibt automatisch eine Nummer, falls noch keine existiert. -> (nummer, neu)"""
     alt = nummer_von(member.id)
     if alt:
         return alt, False
     try:
-        nummer, _ = nummer_zuweisen(member.id)
+        nummer, _ = nummer_zuweisen(member.id)  # kein await bis hier -> keine Doppelvergabe
     except ValueError:
         return None, False
     await nick_setzen(member, nummer)
     await panel_aktualisieren()
     e = text_embed("nummer_zugewiesen", user=member.mention, nummer=nummer)
-    await senden(KANAL_DIENSTNUMMER, content=member.mention, embed=e)
+    await senden(KANAL_DIENSTNUMMER, content=ping(member.mention), embed=e)
     return nummer, True
 
 
@@ -680,6 +853,7 @@ async def nummer_entziehen(guild, user_id, grund):
 
 
 async def abgleich(guild):
+    """Räumt Nummern auf, deren Besitzer weg sind oder die Hauptrolle nicht mehr haben."""
     if guild.get_role(ROLLE_HAUPT_POLIZEI) is None:
         print("⚠️ Hauptrolle nicht gefunden – Abgleich übersprungen (Sicherheitsabbruch).")
         return
@@ -697,6 +871,7 @@ async def abgleich(guild):
                 await nummer_sicherstellen(m)
 
 
+# --------------------------- Warns / Disziplin -------------------------
 def neues_aktenzeichen():
     while True:
         az = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
@@ -705,6 +880,7 @@ def neues_aktenzeichen():
 
 
 async def warn_erstellen(user_id, grund, tage, von_mention, von_id):
+    """Legt die Warn an, postet sie und vergibt die Warn-Rolle. -> (az, aktiv, fehler)"""
     jetzt = datetime.datetime.now(datetime.timezone.utc)
     ablauf = jetzt + datetime.timedelta(days=tage)
     az = neues_aktenzeichen()
@@ -714,23 +890,55 @@ async def warn_erstellen(user_id, grund, tage, von_mention, von_id):
     aktiv = db.execute("SELECT COUNT(*) c FROM warns WHERE user_id=? AND ablauf>?", (user_id, time.time())).fetchone()["c"]
     e = text_embed("disziplinar", user=f"<@{user_id}>", tag=nummer_tag(user_id), grund=grund, az=az,
                    ablauf=discord.utils.format_dt(ablauf, "F"), dauer=f"{tage}d", aktiv=aktiv, direktion=von_mention)
-    await senden(KANAL_WARN, content=f"<@{user_id}>", embed=e)
-    return az, aktiv
+    await senden(KANAL_WARN, content=ping(f"<@{user_id}>"), embed=e)
+    fehler = await warn_rollen_setzen(user_id, f"Warn {az}")
+    return az, aktiv, fehler
 
 
-def dienstzeit_summe(user_id, seit):
-    total = 0.0
-    for r in db.execute("SELECT start, ende FROM dienst_log WHERE user_id=? AND ende>?", (user_id, seit)):
-        total += r["ende"] - max(r["start"], seit)
-    a = db.execute("SELECT start FROM dienst_aktiv WHERE user_id=?", (user_id,)).fetchone()
-    if a:
-        total += time.time() - max(a["start"], seit)
-    return total
+async def warns_ablaufen():
+    """Löscht Warns exakt beim Ablauf und entfernt die Warn-Rolle, wenn keine Warn mehr aktiv ist."""
+    jetzt = time.time()
+    betroffen = [r["user_id"] for r in db.execute("SELECT DISTINCT user_id FROM warns WHERE ablauf<=?", (jetzt,))]
+    if not betroffen:
+        return
+    with db:
+        db.execute("DELETE FROM warns WHERE ablauf<=?", (jetzt,))
+    for uid in betroffen:
+        await warn_rollen_setzen(uid, "Warn abgelaufen")  # Rolle rutscht runter (Warn 3 -> 2 -> 1 -> keine)
 
 
+async def dienstsperren_ablaufen():
+    """Entfernt abgelaufene Dienstsperren samt Rolle."""
+    jetzt = time.time()
+    rows = db.execute("SELECT user_id FROM dienstsperren WHERE ablauf<=?", (jetzt,)).fetchall()
+    if not rows:
+        return
+    with db:
+        db.execute("DELETE FROM dienstsperren WHERE ablauf<=?", (jetzt,))
+    g = hauptguild()
+    if g is None:
+        return
+    for r in rows:
+        await sonderrolle(g.get_member(r["user_id"]), ROLLE_DIENSTSPERRE, False, "Dienstsperre abgelaufen")
+
+
+async def auto_ausstempeln():
+    if not AUTO_AUSSTEMPELN_NACH_STUNDEN:
+        return
+    limit = AUTO_AUSSTEMPELN_NACH_STUNDEN * 3600
+    rows = db.execute("SELECT user_id, start FROM dienst_aktiv WHERE start<?", (time.time() - limit,)).fetchall()
+    for r in rows:
+        dauer = dienst_beenden(r["user_id"], ende=r["start"] + limit)
+        await senden(KANAL_DIENSTZEIT, embed=text_embed("dienstende_auto", user=f"<@{r['user_id']}>",
+                                                        dauer=dauer_text(dauer or 0), stunden=AUTO_AUSSTEMPELN_NACH_STUNDEN))
+    if rows:
+        await dienstzeit_panel_aktualisieren()
+
+
+# --------------------------- Bot ---------------------------------------
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
+intents.members = True  # Im Developer Portal unter "Privileged Gateway Intents" aktivieren!
 
 
 class PolizeiBot(commands.Bot):
@@ -746,7 +954,7 @@ class PolizeiBot(commands.Bot):
         self.add_view(AusbildungView())
         self.add_view(DienstzeitPanelView())
         self.add_view(AusbildungPanelView())
-        self.add_view(DatenbankView())  # NEU: Datenbank-Panel
+        self.add_view(DatenbankView())
         if GUILD_ID:
             g = discord.Object(id=GUILD_ID)
             self.tree.copy_global_to(guild=g)
@@ -766,29 +974,19 @@ bot = PolizeiBot()
 def startup_check():
     probleme = []
     kanaele = {
-        "KANAL_ANWALT": KANAL_ANWALT,
-        "KANAL_AUSWEIS": KANAL_AUSWEIS,
-        "KANAL_DIENSTZEIT": KANAL_DIENSTZEIT,
-        "KANAL_EINSTELLUNG": KANAL_EINSTELLUNG,
-        "KANAL_BEFOERDERUNG": KANAL_BEFOERDERUNG,
-        "KANAL_DEGRADIERUNG": KANAL_DEGRADIERUNG,
-        "KANAL_WARN": KANAL_WARN,
-        "KANAL_SUSPENDIERUNG": KANAL_SUSPENDIERUNG,
-        "KANAL_ENTLASSUNG": KANAL_ENTLASSUNG,
-        "KANAL_SPERREN": KANAL_SPERREN,
-        "KANAL_BEWERBUNGSSPERRE": KANAL_BEWERBUNGSSPERRE,
-        "KANAL_DIENSTNUMMER": KANAL_DIENSTNUMMER,
-        "KANAL_DIENSTNUMMER_PANEL": KANAL_DIENSTNUMMER_PANEL,
-        "KANAL_WOCHENBERICHT": KANAL_WOCHENBERICHT,
-        "KANAL_AUSBILDUNG": KANAL_AUSBILDUNG,
+        "KANAL_ANWALT": KANAL_ANWALT, "KANAL_AUSWEIS": KANAL_AUSWEIS, "KANAL_DIENSTZEIT": KANAL_DIENSTZEIT,
+        "KANAL_EINSTELLUNG": KANAL_EINSTELLUNG, "KANAL_BEFOERDERUNG": KANAL_BEFOERDERUNG,
+        "KANAL_DEGRADIERUNG": KANAL_DEGRADIERUNG, "KANAL_WARN": KANAL_WARN,
+        "KANAL_SUSPENDIERUNG": KANAL_SUSPENDIERUNG, "KANAL_ENTLASSUNG": KANAL_ENTLASSUNG,
+        "KANAL_SPERREN": KANAL_SPERREN, "KANAL_BEWERBUNGSSPERRE": KANAL_BEWERBUNGSSPERRE,
+        "KANAL_DIENSTNUMMER": KANAL_DIENSTNUMMER, "KANAL_DIENSTNUMMER_PANEL": KANAL_DIENSTNUMMER_PANEL,
+        "KANAL_WOCHENBERICHT": KANAL_WOCHENBERICHT, "KANAL_AUSBILDUNG": KANAL_AUSBILDUNG,
     }
     for name, kid in kanaele.items():
-        if not kid:
-            continue
-        if bot.get_channel(kid) is None:
+        if kid and bot.get_channel(kid) is None:
             probleme.append(f"Kanal {name} ({kid}) nicht gefunden")
 
-    guild = bot.get_guild(GUILD_ID) if GUILD_ID else (bot.guilds[0] if bot.guilds else None)
+    guild = hauptguild()
     if guild is None:
         probleme.append("Guild nicht gefunden – Rollenprüfung übersprungen")
     else:
@@ -797,11 +995,13 @@ def startup_check():
             "ROLLE_ANWALT": ROLLE_ANWALT,
             "ROLLE_HAUPT_POLIZEI": ROLLE_HAUPT_POLIZEI,
             "ROLLE_AUSBILDUNG_ABSCHLUSS_PING": ROLLE_AUSBILDUNG_ABSCHLUSS_PING,
+            "ROLLE_WARN_1": ROLLEN_WARN[0], "ROLLE_WARN_2": ROLLEN_WARN[1], "ROLLE_WARN_3": ROLLEN_WARN[2],
+            "ROLLE_DIENSTSPERRE": ROLLE_DIENSTSPERRE,
+            "ROLLE_SUSPENDIERT": ROLLE_SUSPENDIERT,
+            "ROLLE_ENTLASSEN": ROLLE_ENTLASSEN,
         })
         for name, rid in rollen.items():
-            if rid == 0:
-                continue
-            if guild.get_role(rid) is None:
+            if rid and guild.get_role(rid) is None:
                 probleme.append(f"Rolle {name} ({rid}) nicht gefunden")
 
     if probleme:
@@ -824,6 +1024,18 @@ async def wartung():
 
 @tasks.loop(minutes=1)
 async def checks_pruefen():
+    try:
+        await warns_ablaufen()
+    except Exception as e:
+        print("Warn-Ablauf fehlgeschlagen:", repr(e))
+    try:
+        await dienstsperren_ablaufen()
+    except Exception as e:
+        print("Dienstsperren-Ablauf fehlgeschlagen:", repr(e))
+    try:
+        await auto_ausstempeln()
+    except Exception as e:
+        print("Auto-Ausstempeln fehlgeschlagen:", repr(e))
     faellig = db.execute("SELECT * FROM aktivitaetschecks WHERE abgeschlossen=0 AND frist<=?", (time.time(),)).fetchall()
     for row in faellig:
         with db:
@@ -847,7 +1059,7 @@ async def wochenbericht_loop():
         setting_set(key, 1)
 
 
-CLEANUP_WARN_NACH_TAGEN = 90
+# Aufräumen (nachts um 04:00). Warns werden NICHT hier gelöscht, sondern exakt beim Ablauf (siehe warns_ablaufen).
 CLEANUP_LOG_NACH_TAGEN = 180
 CLEANUP_ABGELAUFENE_SPERREN = True
 
@@ -855,20 +1067,14 @@ CLEANUP_ABGELAUFENE_SPERREN = True
 @tasks.loop(time=datetime.time(hour=4, minute=0, tzinfo=TZ))
 async def cleanup():
     jetzt = time.time()
-    warn_cutoff = jetzt - CLEANUP_WARN_NACH_TAGEN * 86400
-    log_cutoff = jetzt - CLEANUP_LOG_NACH_TAGEN * 86400
     with db:
-        cur_warns = db.execute("DELETE FROM warns WHERE ablauf < ? AND ablauf < ?", (jetzt, warn_cutoff))
-        cur_logs = db.execute("DELETE FROM dienst_log WHERE ende < ?", (log_cutoff,))
-        cur_sperren = (0,)
+        c_logs = db.execute("DELETE FROM dienst_log WHERE ende < ?", (jetzt - CLEANUP_LOG_NACH_TAGEN * 86400,)).rowcount
+        c_sperren = 0
         if CLEANUP_ABGELAUFENE_SPERREN:
-            cur_sperren = db.execute("DELETE FROM bewerbungssperren WHERE ablauf < ?", (jetzt,))
-        cur_checks = db.execute("DELETE FROM aktivitaetschecks WHERE abgeschlossen=1 AND frist < ?",
-                                (jetzt - 30 * 86400,))
-    def _cnt(x):
-        return x.rowcount if hasattr(x, "rowcount") else 0
-    print(f"🧹 Cleanup: {_cnt(cur_warns)} Warns, {_cnt(cur_logs)} Logs, "
-          f"{_cnt(cur_sperren)} Sperren, {_cnt(cur_checks)} Checks entfernt.")
+            c_sperren = db.execute("DELETE FROM bewerbungssperren WHERE ablauf < ?", (jetzt,)).rowcount
+        c_checks = db.execute("DELETE FROM aktivitaetschecks WHERE abgeschlossen=1 AND frist < ?",
+                              (jetzt - 30 * 86400,)).rowcount
+    print(f"🧹 Cleanup: {c_logs} Dienst-Logs, {c_sperren} Sperren, {c_checks} Checks entfernt.")
 
 
 for _loop in (wartung, checks_pruefen, wochenbericht_loop, cleanup):
@@ -900,6 +1106,9 @@ async def tree_fehler(interaction: discord.Interaction, error: app_commands.AppC
         pass
 
 
+# ==========================================
+# AUTOMATIK: Rollen-Überwachung
+# ==========================================
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
     if before.roles == after.roles:
@@ -908,14 +1117,21 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     if not hatte and hat and AUTO_DIENSTNUMMER:
         await nummer_sicherstellen(after)
     elif hatte and not hat:
+        if dienst_beenden(after.id) is not None:
+            await dienstzeit_panel_aktualisieren()
         await nummer_entziehen(after.guild, after.id, "Hauptrolle entfernt")
 
 
 @bot.event
 async def on_member_remove(member: discord.Member):
+    if dienst_beenden(member.id) is not None:
+        await dienstzeit_panel_aktualisieren()
     await nummer_entziehen(member.guild, member.id, "Hat den Server verlassen")
 
 
+# ==========================================
+# ANWALT: Trigger + Info-Panel
+# ==========================================
 anwalt_cooldowns = {}
 
 
@@ -927,8 +1143,7 @@ async def on_message(message: discord.Message):
         jetzt = time.time()
         frei_ab = anwalt_cooldowns.get(message.author.id, 0)
         if frei_ab > jetzt:
-            rest_sek = int(frei_ab - jetzt)
-            rest_min = (rest_sek + 59) // 60
+            rest_min = (int(frei_ab - jetzt) + 59) // 60
             await message.reply(f"⏳ Bitte warte noch **{rest_min} Minuten**.", delete_after=10)
             return
         anwalt_cooldowns[message.author.id] = jetzt + 15 * 60
@@ -948,6 +1163,9 @@ async def anwalt_panel(interaction: discord.Interaction):
     await interaction.channel.send(embed=text_embed("anwalt_panel", rolle=f"<@&{ROLLE_ANWALT}>"))
 
 
+# ==========================================
+# HILFE
+# ==========================================
 @bot.tree.command(name="hilfe", description="Zeigt alle Befehle, die du nutzen kannst")
 async def hilfe(interaction: discord.Interaction):
     e = basis_embed(f"📖 Hilfe | {BRANDING_NAME}", "Hier siehst du alle Befehle, die für dich verfügbar sind.", 0x0000FF)
@@ -960,6 +1178,9 @@ async def hilfe(interaction: discord.Interaction):
     await interaction.response.send_message(embed=e, ephemeral=True)
 
 
+# ==========================================
+# PERSONAL: Teamliste
+# ==========================================
 @bot.tree.command(name="teamliste", description="Erstellt eine aktuelle Teamliste")
 async def teamliste(interaction: discord.Interaction):
     await interaction.response.defer()
@@ -989,6 +1210,9 @@ async def teamliste(interaction: discord.Interaction):
     await interaction.followup.send(embeds=embeds)
 
 
+# ==========================================
+# PERSONAL: Einstellung / Beförderung / Degradierung / Entlassung
+# ==========================================
 async def rang_pruefen(interaction, user, rang):
     if user.bot:
         await interaction.followup.send("❌ Bots können nicht verwaltet werden.", ephemeral=True)
@@ -1017,7 +1241,7 @@ async def rangwechsel(interaction, user, rang, grund, key, kanal_id):
         return await interaction.followup.send(f"❌ {fehler}", ephemeral=True)
     e = text_embed(key, user=user.mention, tag=nummer_tag(user.id), rang=rang.mention,
                    alterrang=", ".join(r.mention for r in alte) or "–", grund=grund, direktion=interaction.user.mention)
-    sent = await senden(kanal_id, content=user.mention, embed=e)
+    sent = await senden(kanal_id, content=ping(user.mention), embed=e)
     if sent is None:
         return await interaction.followup.send("⚠️ Rollen wurden geändert, aber der Kanal wurde nicht gefunden.", ephemeral=True)
     await interaction.followup.send("✅ Rollen angepasst & Meldung gepostet.", ephemeral=True)
@@ -1051,12 +1275,16 @@ async def einstellung(interaction: discord.Interaction, user: discord.Member, ra
     fehler = await rollen_aendern(user, add=add, grund=f"Einstellung durch {interaction.user}")
     if fehler:
         return await interaction.followup.send(f"❌ {fehler}", ephemeral=True)
+    hinweis = ""
+    f2 = await sonderrolle(user, ROLLE_ENTLASSEN, False, "Neueinstellung")  # frühere Entlassen-Rolle entfernen
+    if f2:
+        hinweis = f"\n⚠️ Entlassen-Rolle konnte nicht entfernt werden: {f2}"
     if AUTO_DIENSTNUMMER:
         await nummer_sicherstellen(user)
     e = text_embed("einstellung", user=user.mention, tag=nummer_tag(user.id), rang=rang.mention,
                    notiz=notiz, direktion=interaction.user.mention)
-    await senden(KANAL_EINSTELLUNG, content=user.mention, embed=e)
-    await interaction.followup.send("✅ Eingestellt, Rollen vergeben & Meldung gepostet.", ephemeral=True)
+    await senden(KANAL_EINSTELLUNG, content=ping(user.mention), embed=e)
+    await interaction.followup.send("✅ Eingestellt, Rollen vergeben & Meldung gepostet." + hinweis, ephemeral=True)
 
 
 @bot.tree.command(name="entlassung", description="Entlässt einen Beamten")
@@ -1072,19 +1300,37 @@ async def entlassung(interaction: discord.Interaction, user: discord.Member, gru
     nummer = nummer_von(user.id)
     tag = f" [{nummer}]" if nummer else ""
     await nummer_entziehen(interaction.guild, user.id, "Entlassung")
+    if dienst_beenden(user.id) is not None:
+        await dienstzeit_panel_aktualisieren()
+    with db:
+        db.execute("DELETE FROM suspendierungen WHERE user_id=?", (user.id,))
+        db.execute("DELETE FROM dienstsperren WHERE user_id=?", (user.id,))
+    hinweise = []
+    sonder = [(ROLLE_SUSPENDIERT, False, "Suspendiert-Rolle"), (ROLLE_DIENSTSPERRE, False, "Dienstsperre-Rolle")]
+    sonder += [(rid, False, "Warn-Rolle") for rid in ROLLEN_WARN]
+    sonder.append((ROLLE_ENTLASSEN, True, "Entlassen-Rolle"))
+    for rid, geben, art in sonder:
+        f = await sonderrolle(user, rid, geben, f"Entlassung durch {interaction.user}")
+        if f:
+            hinweise.append(f"⚠️ {art}: {f}")
     e = text_embed("entlassung", user=user.mention, tag=tag, grund=grund, nummer=nummer or "-",
                    direktion=interaction.user.mention)
-    await senden(KANAL_ENTLASSUNG, content=user.mention, embed=e)
-    await interaction.followup.send("✅ Rollen entfernt, Nummer freigegeben & Meldung gepostet.", ephemeral=True)
+    await senden(KANAL_ENTLASSUNG, content=ping(user.mention), embed=e)
+    await interaction.followup.send("✅ Rollen entfernt, Nummer freigegeben & Meldung gepostet."
+                                    + ("\n" + "\n".join(hinweise) if hinweise else ""), ephemeral=True)
 
 
+# ==========================================
+# DISZIPLIN: Warn / Suspendierung / Sperren
+# ==========================================
 @bot.tree.command(name="warn", description="Leitet eine Disziplinarmaßnahme (Dienst-Warn) ein")
 @ist_fuehrung()
 async def warn(interaction: discord.Interaction, user: discord.Member, grund: str,
                dauer_tage: app_commands.Range[int, 1, 365] = 7):
     await interaction.response.defer(ephemeral=True)
-    az, _ = await warn_erstellen(user.id, grund, dauer_tage, interaction.user.mention, interaction.user.id)
-    await interaction.followup.send(f"✅ Maßnahme gepostet. Aktenzeichen: `{az}`", ephemeral=True)
+    az, _, fehler = await warn_erstellen(user.id, grund, dauer_tage, interaction.user.mention, interaction.user.id)
+    hinweis = f"\n⚠️ Warn-Rolle konnte nicht vergeben werden: {fehler}" if fehler else ""
+    await interaction.followup.send(f"✅ Maßnahme gepostet. Aktenzeichen: `{az}`{hinweis}", ephemeral=True)
 
 
 @bot.tree.command(name="warns", description="Zeigt die aktiven Warns eines Beamten")
@@ -1093,7 +1339,7 @@ async def warns(interaction: discord.Interaction, user: discord.Member):
     rows = db.execute("SELECT * FROM warns WHERE user_id=? AND ablauf>? ORDER BY id", (user.id, time.time())).fetchall()
     if not rows:
         return await interaction.response.send_message(f"✅ {user.mention} hat keine aktiven Warns.", ephemeral=True)
-    zeilen = [f"`{r['az'] or '#' + str(r['id'])}` – {r['grund']} (bis {fmt_zeit(r['ablauf'], 'd')})" for r in rows]
+    zeilen = [f"`{r['az'] or '#' + str(r['id'])}` – {r['grund']} (bis {fmt_zeit(r['ablauf'], 'F')})" for r in rows]
     await interaction.response.send_message(
         embed=basis_embed(f"⚠️ Aktive Warns: {user.display_name}", "\n".join(zeilen)[:4000], 0xFFA500), ephemeral=True)
 
@@ -1101,19 +1347,49 @@ async def warns(interaction: discord.Interaction, user: discord.Member):
 @bot.tree.command(name="warn_entfernen", description="Entfernt eine Warn anhand des Aktenzeichens")
 @ist_fuehrung()
 async def warn_entfernen(interaction: discord.Interaction, aktenzeichen: str):
+    await interaction.response.defer(ephemeral=True)
+    az = aktenzeichen.strip().upper()
+    row = db.execute("SELECT user_id FROM warns WHERE az=?", (az,)).fetchone()
+    if not row:
+        return await interaction.followup.send("❌ Kein Eintrag mit diesem Aktenzeichen gefunden.", ephemeral=True)
     with db:
-        cur = db.execute("DELETE FROM warns WHERE az=?", (aktenzeichen.strip().upper(),))
-    text = f"✅ `{aktenzeichen.upper()}` entfernt." if cur.rowcount else "❌ Kein Eintrag mit diesem Aktenzeichen gefunden."
-    await interaction.response.send_message(text, ephemeral=True)
+        db.execute("DELETE FROM warns WHERE az=?", (az,))
+    f = await warn_rollen_setzen(row["user_id"], f"Warn {az} entfernt")
+    hinweis = f"\n⚠️ Warn-Rolle konnte nicht angepasst werden: {f}" if f else ""
+    await interaction.followup.send(f"✅ `{az}` entfernt." + hinweis, ephemeral=True)
 
 
 @bot.tree.command(name="suspendierung", description="Suspendiert einen Beamten")
 @ist_fuehrung()
 async def suspendierung(interaction: discord.Interaction, user: discord.Member, grund: str):
     await interaction.response.defer(ephemeral=True)
+    with db:
+        db.execute("INSERT INTO suspendierungen (user_id, grund, von, seit) VALUES (?, ?, ?, ?) "
+                   "ON CONFLICT(user_id) DO UPDATE SET grund=excluded.grund, von=excluded.von, seit=excluded.seit",
+                   (user.id, grund, interaction.user.id, time.time()))
+    if dienst_beenden(user.id) is not None:  # laufender Dienst wird beendet
+        await dienstzeit_panel_aktualisieren()
+    fehler = await sonderrolle(user, ROLLE_SUSPENDIERT, True, f"Suspendierung durch {interaction.user}")
     e = text_embed("suspendierung", user=user.mention, tag=nummer_tag(user.id), grund=grund, direktion=interaction.user.mention)
-    await senden(KANAL_SUSPENDIERUNG, content=user.mention, embed=e)
-    await interaction.followup.send("✅ Suspendierung gepostet.", ephemeral=True)
+    await senden(KANAL_SUSPENDIERUNG, content=ping(user.mention), embed=e)
+    hinweis = f"\n⚠️ Suspendiert-Rolle konnte nicht vergeben werden: {fehler}" if fehler else ""
+    await interaction.followup.send("✅ Suspendierung gepostet. Einstempeln ist für den Beamten gesperrt." + hinweis,
+                                    ephemeral=True)
+
+
+@bot.tree.command(name="suspendierung_aufheben", description="Hebt eine Suspendierung auf")
+@ist_fuehrung()
+async def suspendierung_aufheben(interaction: discord.Interaction, user: discord.Member):
+    await interaction.response.defer(ephemeral=True)
+    with db:
+        c = db.execute("DELETE FROM suspendierungen WHERE user_id=?", (user.id,))
+    fehler = await sonderrolle(user, ROLLE_SUSPENDIERT, False, f"Suspendierung aufgehoben durch {interaction.user}")
+    if not c.rowcount and not ROLLE_SUSPENDIERT:
+        return await interaction.followup.send("❌ Dieser Beamte ist nicht suspendiert.", ephemeral=True)
+    e = text_embed("suspendierung_aufgehoben", user=user.mention, tag=nummer_tag(user.id), direktion=interaction.user.mention)
+    await senden(KANAL_SUSPENDIERUNG, content=ping(user.mention), embed=e)
+    hinweis = f"\n⚠️ Rolle konnte nicht entfernt werden: {fehler}" if fehler else ""
+    await interaction.followup.send("✅ Suspendierung aufgehoben." + hinweis, ephemeral=True)
 
 
 @bot.tree.command(name="dienstsperre", description="Verhängt eine Dienst-Sperre")
@@ -1122,10 +1398,31 @@ async def dienstsperre(interaction: discord.Interaction, user: discord.Member, g
                        dauer_tage: app_commands.Range[int, 1, 365] = 7):
     await interaction.response.defer(ephemeral=True)
     ablauf = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=dauer_tage)
+    with db:
+        db.execute("INSERT INTO dienstsperren (user_id, grund, von, ablauf) VALUES (?, ?, ?, ?) "
+                   "ON CONFLICT(user_id) DO UPDATE SET grund=excluded.grund, von=excluded.von, ablauf=excluded.ablauf",
+                   (user.id, grund, interaction.user.id, ablauf.timestamp()))
+    if dienst_beenden(user.id) is not None:  # laufender Dienst wird beendet
+        await dienstzeit_panel_aktualisieren()
+    fehler = await sonderrolle(user, ROLLE_DIENSTSPERRE, True, f"Dienstsperre durch {interaction.user}")
     e = text_embed("dienstsperre", user=user.mention, tag=nummer_tag(user.id), grund=grund, dauer=f"{dauer_tage}d",
                    ablauf=discord.utils.format_dt(ablauf, "F"), direktion=interaction.user.mention)
-    await senden(KANAL_SPERREN, content=user.mention, embed=e)
-    await interaction.followup.send("✅ Sperre gepostet.", ephemeral=True)
+    await senden(KANAL_SPERREN, content=ping(user.mention), embed=e)
+    hinweis = f"\n⚠️ Dienstsperre-Rolle konnte nicht vergeben werden: {fehler}" if fehler else ""
+    await interaction.followup.send("✅ Sperre gepostet. Einstempeln ist bis zum Ablauf gesperrt." + hinweis, ephemeral=True)
+
+
+@bot.tree.command(name="dienstsperre_aufheben", description="Hebt eine Dienstsperre vorzeitig auf")
+@ist_fuehrung()
+async def dienstsperre_aufheben(interaction: discord.Interaction, user: discord.Member):
+    await interaction.response.defer(ephemeral=True)
+    with db:
+        c = db.execute("DELETE FROM dienstsperren WHERE user_id=?", (user.id,))
+    fehler = await sonderrolle(user, ROLLE_DIENSTSPERRE, False, f"Dienstsperre aufgehoben durch {interaction.user}")
+    if not c.rowcount and not fehler:
+        return await interaction.followup.send("❌ Dieser Beamte hat keine aktive Dienstsperre.", ephemeral=True)
+    hinweis = f"\n⚠️ Rolle konnte nicht entfernt werden: {fehler}" if fehler else ""
+    await interaction.followup.send("✅ Dienstsperre aufgehoben." + hinweis, ephemeral=True)
 
 
 @bot.tree.command(name="bewerbungssperre", description="Verhängt eine Bewerbungssperre für einen Nutzer")
@@ -1140,7 +1437,7 @@ async def bewerbungssperre(interaction: discord.Interaction, user: discord.User,
                    (user.id, grund, ablauf.timestamp(), interaction.user.id))
     e = text_embed("bewerbungssperre", user=user.mention, grund=grund, dauer=f"{dauer_tage}d",
                    ablauf=discord.utils.format_dt(ablauf, "F"), direktion=interaction.user.mention)
-    await senden(KANAL_BEWERBUNGSSPERRE, content=user.mention, embed=e)
+    await senden(KANAL_BEWERBUNGSSPERRE, content=ping(user.mention), embed=e)
     await interaction.followup.send("✅ Bewerbungssperre gepostet & gespeichert.", ephemeral=True)
 
 
@@ -1153,27 +1450,33 @@ async def bewerbungssperre_pruefen(interaction: discord.Interaction, user: disco
     await interaction.response.send_message(text, ephemeral=True)
 
 
+# ==========================================
+# DIENSTZEIT (mit Zeiterfassung)
+# ==========================================
 async def _dienstzeit_aktion(interaction: discord.Interaction, aktion: str):
     if not hat_hauptrolle(interaction.user) and not ist_fuehrung_member(interaction.user):
         return await interaction.response.send_message("❌ Nur Beamte können sich ein-/ausstempeln.", ephemeral=True)
     uid = interaction.user.id
-    aktiv = db.execute("SELECT start FROM dienst_aktiv WHERE user_id=?", (uid,)).fetchone()
     if aktion == "ein":
-        if aktiv:
+        if db.execute("SELECT 1 FROM suspendierungen WHERE user_id=?", (uid,)).fetchone():
+            return await interaction.response.send_message("⛔ Du bist suspendiert und kannst dich nicht einstempeln.", ephemeral=True)
+        sperre = db.execute("SELECT ablauf FROM dienstsperren WHERE user_id=? AND ablauf>?", (uid, time.time())).fetchone()
+        if sperre:
+            return await interaction.response.send_message(
+                f"⛔ Du hast eine Dienstsperre bis {fmt_zeit(sperre['ablauf'])} und kannst dich nicht einstempeln.", ephemeral=True)
+        if db.execute("SELECT 1 FROM dienst_aktiv WHERE user_id=?", (uid,)).fetchone():
             return await interaction.response.send_message("❌ Du bist bereits im Dienst.", ephemeral=True)
         with db:
             db.execute("INSERT INTO dienst_aktiv (user_id, start) VALUES (?, ?)", (uid, time.time()))
         e = text_embed("dienstbeginn", user=interaction.user.mention)
     else:
-        if not aktiv:
+        dauer = dienst_beenden(uid)
+        if dauer is None:
             return await interaction.response.send_message("❌ Du bist nicht im Dienst.", ephemeral=True)
-        ende = time.time()
-        with db:
-            db.execute("DELETE FROM dienst_aktiv WHERE user_id=?", (uid,))
-            db.execute("INSERT INTO dienst_log (user_id, start, ende) VALUES (?, ?, ?)", (uid, aktiv["start"], ende))
-        e = text_embed("dienstende", user=interaction.user.mention, dauer=dauer_text(ende - aktiv["start"]))
+        e = text_embed("dienstende", user=interaction.user.mention, dauer=dauer_text(dauer))
     await senden(KANAL_DIENSTZEIT, embed=e)
     await interaction.response.send_message("✅ Eingetragen.", ephemeral=True)
+    await dienstzeit_panel_aktualisieren()
 
 
 async def _dienstzeit_info_anzeigen(interaction: discord.Interaction, user: discord.Member):
@@ -1201,6 +1504,51 @@ async def dienstzeit_info(interaction: discord.Interaction, user: discord.Member
     await _dienstzeit_info_anzeigen(interaction, user or interaction.user)
 
 
+class DienstzeitPanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Einstempeln", style=discord.ButtonStyle.success, emoji="🟢", custom_id="polizei:dz:ein")
+    async def ein(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _dienstzeit_aktion(interaction, "ein")
+
+    @discord.ui.button(label="Ausstempeln", style=discord.ButtonStyle.danger, emoji="🔴", custom_id="polizei:dz:aus")
+    async def aus(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _dienstzeit_aktion(interaction, "aus")
+
+    @discord.ui.button(label="Meine Dienstzeit", style=discord.ButtonStyle.secondary, emoji="⏱️",
+                       custom_id="polizei:dz:info")
+    async def info(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _dienstzeit_info_anzeigen(interaction, interaction.user)
+
+    @discord.ui.button(label="Wer ist im Dienst?", style=discord.ButtonStyle.secondary, emoji="👮",
+                       custom_id="polizei:dz:aktiv")
+    async def aktiv(self, interaction: discord.Interaction, button: discord.ui.Button):
+        rows = db.execute("SELECT user_id, start FROM dienst_aktiv ORDER BY start").fetchall()
+        zeilen = [f"<@{r['user_id']}>{nummer_tag(r['user_id'])} – seit {fmt_zeit(r['start'], 'R')}" for r in rows]
+        e = basis_embed(f"👮 Aktuell im Dienst ({len(rows)})",
+                        "\n".join(zeilen)[:4000] or "*Niemand ist eingestempelt.*", 0x0000FF)
+        await interaction.response.send_message(embed=e, ephemeral=True)
+
+
+@bot.tree.command(name="dienstzeit_panel", description="Erstellt das Dienstzeit-Panel mit Live-Liste (Nur Admins)")
+@app_commands.default_permissions(administrator=True)
+@app_commands.checks.has_permissions(administrator=True)
+async def dienstzeit_panel(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        msg = await interaction.channel.send(embed=dienstzeit_panel_embed(), view=DienstzeitPanelView())
+    except discord.HTTPException:
+        return await interaction.followup.send("❌ Konnte hier nicht posten (fehlende Rechte?).", ephemeral=True)
+    setting_set("dz_panel_message", msg.id)  # ab jetzt aktualisiert sich dieses Panel automatisch
+    setting_set("dz_panel_channel", msg.channel.id)
+    await interaction.followup.send("✅ Panel erstellt! Die Liste „Aktuell im Dienst“ aktualisiert sich automatisch.",
+                                    ephemeral=True)
+
+
+# ==========================================
+# WOCHENBERICHT
+# ==========================================
 async def wochenbericht_senden(kanal_id):
     kanal = bot.get_channel(kanal_id)
     if kanal is None:
@@ -1246,6 +1594,9 @@ async def wochenbericht(interaction: discord.Interaction):
                                     ephemeral=True)
 
 
+# ==========================================
+# AKTIVITÄTSCHECK
+# ==========================================
 async def aktivitaetscheck_auswerten(row):
     kanal = bot.get_channel(row["channel_id"])
     if kanal is None:
@@ -1332,41 +1683,9 @@ async def aktivitaetscheck(interaction: discord.Interaction, stunden: app_comman
     await interaction.followup.send(f"✅ Aktivitätscheck gestartet ({stunden}h Frist).", ephemeral=True)
 
 
-class DienstzeitPanelView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Einstempeln", style=discord.ButtonStyle.success, emoji="🟢", custom_id="polizei:dz:ein")
-    async def ein(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await _dienstzeit_aktion(interaction, "ein")
-
-    @discord.ui.button(label="Ausstempeln", style=discord.ButtonStyle.danger, emoji="🔴", custom_id="polizei:dz:aus")
-    async def aus(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await _dienstzeit_aktion(interaction, "aus")
-
-    @discord.ui.button(label="Meine Dienstzeit", style=discord.ButtonStyle.secondary, emoji="⏱️",
-                       custom_id="polizei:dz:info")
-    async def info(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await _dienstzeit_info_anzeigen(interaction, interaction.user)
-
-    @discord.ui.button(label="Wer ist im Dienst?", style=discord.ButtonStyle.secondary, emoji="👮",
-                       custom_id="polizei:dz:aktiv")
-    async def aktiv(self, interaction: discord.Interaction, button: discord.ui.Button):
-        rows = db.execute("SELECT user_id, start FROM dienst_aktiv ORDER BY start").fetchall()
-        zeilen = [f"<@{r['user_id']}>{nummer_tag(r['user_id'])} – seit {fmt_zeit(r['start'], 'R')}" for r in rows]
-        e = basis_embed(f"👮 Aktuell im Dienst ({len(rows)})",
-                        "\n".join(zeilen)[:4000] or "*Niemand ist eingestempelt.*", 0x0000FF)
-        await interaction.response.send_message(embed=e, ephemeral=True)
-
-
-@bot.tree.command(name="dienstzeit_panel", description="Erstellt das Dienstzeit-Panel (Nur Admins)")
-@app_commands.default_permissions(administrator=True)
-@app_commands.checks.has_permissions(administrator=True)
-async def dienstzeit_panel(interaction: discord.Interaction):
-    await interaction.response.send_message("✅ Panel erstellt!", ephemeral=True)
-    await interaction.channel.send(embed=text_embed("dienstzeit_panel"), view=DienstzeitPanelView())
-
-
+# ==========================================
+# PLATZVERWEIS
+# ==========================================
 class PlatzverweisModal(discord.ui.Modal, title="Platzverweis eintragen"):
     person = discord.ui.TextInput(label="Person (Ingame-/Roblox-Name)", max_length=80)
     ort = discord.ui.TextInput(label="Ort", placeholder="z.B. Hauptbahnhof", max_length=100)
@@ -1377,7 +1696,7 @@ class PlatzverweisModal(discord.ui.Modal, title="Platzverweis eintragen"):
         e = text_embed("platzverweis", person=self.person.value, ort=self.ort.value, grund=self.grund.value,
                        dauer=self.dauer.value,
                        beamter=f"{interaction.user.mention}{nummer_tag(interaction.user.id)}")
-        await interaction.response.send_message(embed=e)
+        await interaction.response.send_message(embed=e)  # öffentlich im Kanal
 
 
 class PlatzverweisView(discord.ui.View):
@@ -1400,6 +1719,9 @@ async def platzverweis_panel(interaction: discord.Interaction):
     await interaction.channel.send(embed=text_embed("platzverweis_panel"), view=PlatzverweisView())
 
 
+# ==========================================
+# AUSBILDUNGS-TRACKER
+# ==========================================
 def ausbildung_embed(user_id):
     row = db.execute("SELECT * FROM ausbildung WHERE user_id=?", (user_id,)).fetchone()
     erledigt = {r["modul"]: r for r in db.execute("SELECT * FROM ausbildung_module WHERE user_id=?", (user_id,))}
@@ -1470,7 +1792,7 @@ async def ausbildung_start(interaction: discord.Interaction, user: discord.Membe
                    (user.id, interaction.user.id, time.time()))
     kanal = bot.get_channel(KANAL_AUSBILDUNG) if KANAL_AUSBILDUNG else interaction.channel
     try:
-        msg = await kanal.send(content=user.mention, embed=ausbildung_embed(user.id), view=AusbildungView())
+        msg = await kanal.send(content=ping(user.mention), embed=ausbildung_embed(user.id), view=AusbildungView())
     except (discord.HTTPException, AttributeError):
         return await interaction.followup.send("❌ Konnte den Tracker nicht posten (Kanal/Rechte prüfen).", ephemeral=True)
     with db:
@@ -1553,6 +1875,9 @@ async def ausbildung_panel(interaction: discord.Interaction):
     await interaction.channel.send(embed=text_embed("ausbildung_panel"), view=AusbildungPanelView())
 
 
+# ==========================================
+# DIENSTNUMMERN-VERWALTUNG
+# ==========================================
 @bot.tree.command(name="dienstnummer", description="Teilt einem Beamten eine Dienstnummer zu (Führungsebene)")
 @ist_fuehrung()
 async def dienstnummer(interaction: discord.Interaction, user: discord.Member, wunsch_nummer: str = None):
@@ -1578,7 +1903,7 @@ async def dienstnummer(interaction: discord.Interaction, user: discord.Member, w
     await panel_aktualisieren()
     await interaction.followup.send(embed=e)
     if interaction.channel_id != KANAL_DIENSTNUMMER:
-        await senden(KANAL_DIENSTNUMMER, content=user.mention, embed=e)
+        await senden(KANAL_DIENSTNUMMER, content=ping(user.mention), embed=e)
 
 
 @bot.tree.command(name="dienstnummer_freigeben", description="Gibt die Dienstnummer eines Beamten frei (Führungsebene)")
@@ -1615,6 +1940,9 @@ async def abgleich_cmd(interaction: discord.Interaction):
     await interaction.followup.send("✅ Abgleich abgeschlossen.", ephemeral=True)
 
 
+# ==========================================
+# DIENSTAUSWEIS (Self-Service Dienstnummer)
+# ==========================================
 class DienstausweisModal(discord.ui.Modal, title="Dienstausweis Registrierung"):
     roblox_name = discord.ui.TextInput(label="Roblox Benutzername", placeholder="z.B. Max_Mustermann123",
                                        required=True, max_length=50)
@@ -1653,6 +1981,9 @@ async def dienstausweis_setup(interaction: discord.Interaction):
     await interaction.channel.send(embed=text_embed("dienstausweis_panel"), view=DienstausweisView())
 
 
+# ==========================================
+# AUSWEIS-ANTRÄGE (Personalausweis, Führerschein, Waffenschein)
+# ==========================================
 class AusweisModal(discord.ui.Modal):
     def __init__(self, typ_key):
         self.typ_key = typ_key
@@ -1708,12 +2039,12 @@ def antrag_embed_status(message, text, farbe):
         return basis_embed("🪪 Antrag", text, farbe)
     e = message.embeds[0]
     e.color = farbe
-    status_gefunden = False
+    gefunden = False
     for i, f in enumerate(e.fields):
         if f.name == "Status":
             e.set_field_at(i, name="Status", value=text, inline=False)
-            status_gefunden = True
-    if not status_gefunden:
+            gefunden = True
+    if not gefunden:
         e.add_field(name="Status", value=text, inline=False)
     return e
 
@@ -1793,42 +2124,36 @@ async def ausweis_panel(interaction: discord.Interaction):
 
 
 # ==========================================
-# NEU: POLIZEILICHE DATENBANK (TERMINAL-PANEL)
+# POLIZEILICHE DATENBANK (TERMINAL-PANEL)
 # ==========================================
 class DatenbankAbfrageModal(discord.ui.Modal, title="Polizeiliches Register"):
     suchbegriff = discord.ui.TextInput(
         label="Dienstnummer oder Roblox-Name",
         placeholder="z.B. BLP05 oder Max_Mustermann",
         required=True,
-        max_length=50
+        max_length=50,
     )
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        eingabe = self.suchbegriff.value.strip()
-        
-        # Prüfen, ob es eine Dienstnummer ist
+        eingabe = self.suchbegriff.value.strip().lstrip("@")
+
         nummer_check = nummer_normalisieren(eingabe)
-        ergebnis = None
-        
         if nummer_check:
-            r = db.execute("SELECT user_id, roblox FROM dienstnummern WHERE nummer=?", (nummer_check,)).fetchone()
-            if r:
-                ergebnis = r
+            ergebnis = db.execute("SELECT user_id, roblox FROM dienstnummern WHERE nummer=?", (nummer_check,)).fetchone()
         else:
-            r = db.execute("SELECT user_id, roblox FROM dienstnummern WHERE LOWER(roblox)=?", (eingabe.lower(),)).fetchone()
-            if r:
-                ergebnis = r
+            ergebnis = db.execute("SELECT user_id, roblox FROM dienstnummern WHERE LOWER(roblox)=?",
+                                  (eingabe.lower(),)).fetchone()
 
         if not ergebnis:
             e = basis_embed("❌ Eintrag nicht gefunden", farbe=0xFF0000)
-            e.description = f"Für die Eingabe **`{eingabe}`** konnte kein Eintrag im Register gefunden werden.\nBitte überprüfe die Schreibweise."
+            e.description = (f"Für die Eingabe **`{eingabe}`** konnte kein Eintrag im Register gefunden werden.\n"
+                             "Bitte überprüfe die Schreibweise.")
             return await interaction.followup.send(embed=e, ephemeral=True)
 
         uid = ergebnis["user_id"]
         roblox = ergebnis["roblox"] or "Nicht hinterlegt"
         nummer = nummer_von(uid) or "Keine"
-        
         member = interaction.guild.get_member(uid)
         discord_name = member.mention if member else f"Verlassen (`{uid}`)"
 
@@ -1837,7 +2162,6 @@ class DatenbankAbfrageModal(discord.ui.Modal, title="Polizeiliches Register"):
         e.add_field(name="👤 Discord Account", value=discord_name, inline=False)
         e.add_field(name="🪪 Dienstnummer", value=f"**{nummer}**", inline=True)
         e.add_field(name="🎮 Roblox-Name", value=f"**{roblox}**", inline=True)
-        
         await interaction.followup.send(embed=e, ephemeral=True)
 
 
@@ -1845,8 +2169,11 @@ class DatenbankView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Registerabfrage starten", style=discord.ButtonStyle.secondary, emoji="🖥️", custom_id="polizei:datenbank:abfrage")
+    @discord.ui.button(label="Registerabfrage starten", style=discord.ButtonStyle.secondary, emoji="🖥️",
+                       custom_id="polizei:datenbank:abfrage")
     async def abfrage(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not hat_hauptrolle(interaction.user) and not ist_fuehrung_member(interaction.user):
+            return await interaction.response.send_message("❌ Nur Beamte dürfen das Register abfragen.", ephemeral=True)
         await interaction.response.send_modal(DatenbankAbfrageModal())
 
 
@@ -1855,20 +2182,20 @@ class DatenbankView(discord.ui.View):
 @app_commands.checks.has_permissions(administrator=True)
 async def datenbank_panel(interaction: discord.Interaction):
     await interaction.response.send_message("✅ Datenbank-Panel erstellt!", ephemeral=True)
-    
     e = basis_embed(
-        titel="💻 Polizeiliche Datenbank",
-        beschreibung=(
-            "Verwenden Sie dieses Terminal, um Dienstnummern anhand des **Roblox-Benutzernamens** "
-            "oder der **Dienstnummer** (z.B. BLP02) abzufragen.\n"
-            "Missbrauch der Datenbank wird disziplinarisch verfolgt.\n\n"
-            "▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
-            "*Leitstelle Berlin | Polizei*"
-        ),
-        farbe=0x2B5BFF
+        "💻 Polizeiliche Datenbank",
+        "Verwenden Sie dieses Terminal, um Dienstnummern anhand des **Roblox-Benutzernamens** "
+        "oder der **Dienstnummer** (z.B. BLP02) abzufragen.\n"
+        "Missbrauch der Datenbank wird disziplinarisch verfolgt.\n\n"
+        "▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+        f"*{BRANDING_FOOTER}*",
+        0x2B5BFF,
     )
     await interaction.channel.send(embed=e, view=DatenbankView())
 
 
+# ==========================================
+# Bot starten
+# ==========================================
 if __name__ == "__main__":
     bot.run(TOKEN)
